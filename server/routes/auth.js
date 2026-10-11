@@ -3,7 +3,6 @@ import {
   usernameProblem, passwordProblem,
 } from '../auth.js';
 import { requireUser, requireAccount } from '../app.js';
-import { cancelSubscription, BillingError } from './billing.js';
 
 const strictLimit = { rateLimit: { max: 10, timeWindow: '15 minutes' } };
 // Keyed by IP, not session: free guest sessions must not each get their own password-guessing budget.
@@ -25,7 +24,7 @@ function accountThrottle({ max = 20, windowMs = 15 * 60_000 } = {}) {
 export function publicUser(u) {
   if (!u) return null;
   return {
-    id: u.id, username: u.username, isGuest: u.isGuest, isAdmin: u.isAdmin, isPremium: u.isPremium,
+    id: u.id, username: u.username, isGuest: u.isGuest, isAdmin: u.isAdmin,
     banned: Boolean(u.banned), createdAt: u.created_at,
   };
 }
@@ -39,6 +38,7 @@ export default async function authRoutes(app) {
     setPass: db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?'),
     setPassAndRecovery: db.prepare('UPDATE users SET pass_hash = ?, recovery_hash = ? WHERE id = ?'),
     moveLogs: db.prepare('UPDATE logs SET user_id = ? WHERE user_id = ?'),
+    moveChecks: db.prepare('UPDATE OR IGNORE gut_checks SET user_id = ? WHERE user_id = ?'),
     deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
     userAudio: db.prepare('SELECT audio_id FROM logs WHERE user_id = ? AND audio_id IS NOT NULL'),
   };
@@ -48,7 +48,7 @@ export default async function authRoutes(app) {
   // Signing in from a guest session: bring that device's logs into the account and drop the guest.
   const switchTo = (req, reply, userId) => {
     if (req.user?.isGuest && req.user.id !== userId) {
-      db.transaction(() => { q.moveLogs.run(userId, req.user.id); q.deleteUser.run(req.user.id); })();
+      db.transaction(() => { q.moveLogs.run(userId, req.user.id); q.moveChecks.run(userId, req.user.id); q.deleteUser.run(req.user.id); })();
     } else {
       sessions.destroy(req.cookies[COOKIE]);
     }
@@ -59,12 +59,8 @@ export default async function authRoutes(app) {
     user: publicUser(req.user),
     config: {
       appName: cfg.appName,
-      billingEnabled: cfg.billingEnabled,
-      premiumPrice: cfg.stripe.priceLabel,
-      premiumMode: cfg.stripe.mode,
       supportEmail: cfg.supportEmail,
       maxClipSeconds: cfg.maxClipSeconds,
-      freeHistoryDays: cfg.freeHistoryDays,
     },
   }));
 
@@ -76,7 +72,7 @@ export default async function authRoutes(app) {
     const now = Date.now();
     const id = Number(q.createUser.run(now, now).lastInsertRowid);
     startSession(reply, id);
-    return { user: { id, username: null, isGuest: true, isAdmin: false, isPremium: !cfg.billingEnabled, banned: false, createdAt: now } };
+    return { user: { id, username: null, isGuest: true, isAdmin: false, banned: false, createdAt: now } };
   });
 
   const credsSchema = {
@@ -162,13 +158,6 @@ export default async function authRoutes(app) {
       return reply.code(400).send({ error: `Type ${expected} to confirm.` });
     }
     const audioIds = q.userAudio.all(req.user.id).map((r) => r.audio_id);
-    try {
-      await cancelSubscription(app, req.user);
-    } catch (err) {
-      if (!(err instanceof BillingError)) throw err;
-      req.log.error({ err: err.cause }, 'subscription cancel failed; account kept');
-      return reply.code(502).send({ error: 'Couldn’t cancel your subscription right now, so nothing was deleted. Please try again in a minute.' });
-    }
     q.deleteUser.run(req.user.id); // cascades to sessions, logs, posts, reactions, reports, blocks
     await app.audio.remove(audioIds);
     reply.clearCookie(COOKIE, { path: '/' });

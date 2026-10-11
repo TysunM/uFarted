@@ -22,23 +22,10 @@ export function loadConfig(overrides = {}) {
     modWebhookUrl: env.MOD_WEBHOOK_URL || '',
     maxClipSeconds: int(env.MAX_CLIP_SECONDS, 15),
     ffmpegConcurrency: int(env.FFMPEG_CONCURRENCY, 2),
-    freeHistoryDays: 30,
-    stripe: {
-      secretKey: env.STRIPE_SECRET_KEY || '',
-      webhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
-      priceId: env.STRIPE_PRICE_ID || '',
-      mode: env.STRIPE_MODE === 'subscription' ? 'subscription' : 'payment',
-      priceLabel: env.PREMIUM_PRICE_LABEL || '$4.99 one-time',
-    },
     ...overrides,
   };
-  cfg.billingEnabled = Boolean(cfg.stripe.secretKey && cfg.stripe.priceId && cfg.stripe.webhookSecret);
   if (cfg.production && !/^https:\/\//.test(cfg.publicUrl)) {
-    throw new Error('PUBLIC_URL must be set to your https:// address in production (used for CSRF checks and payment redirects).');
-  }
-  const stripeParts = [cfg.stripe.secretKey, cfg.stripe.priceId, cfg.stripe.webhookSecret].filter(Boolean).length;
-  if (stripeParts > 0 && stripeParts < 3) {
-    throw new Error('Set all of STRIPE_SECRET_KEY, STRIPE_PRICE_ID and STRIPE_WEBHOOK_SECRET, or none of them.');
+    throw new Error('PUBLIC_URL must be set to your https:// address in production (used for CSRF checks and share links).');
   }
   return cfg;
 }

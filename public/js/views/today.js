@@ -1,10 +1,12 @@
-import { KINDS, HEALTH, TRIGGERS, SMELL, typeInfo } from '../catalog.js';
+import { KINDS, HEALTH, TRIGGERS, SMELL, BLOATING, PAIN, typeInfo } from '../catalog.js';
 import { el, svg, toast, localDate, prettyDate, timeOf } from '../ui.js';
 import { api, createLog } from '../api.js';
 import { openLogSheet } from '../logsheet.js';
 import { player } from '../player.js';
 
 const FLAG_TEXT = {
+  bloating: 'You’ve felt bloated on 3+ days this week.',
+  pain: 'You’ve had moderate or severe belly pain on 3+ days this week.',
   discomfort: 'You’ve logged moderate or severe discomfort on 3+ days this week.',
   wet: 'You’ve logged wet ones on 3+ days this week.',
   sulfur: 'You’ve logged rotten-egg burps on 3+ days this week.',
@@ -28,6 +30,38 @@ function statusLine(kind, count, baseline) {
     return `Your usual: ~${usual}/day`;
   }
   return kind === 'fart' ? `Most people log ${h.low}–${h.high}` : `Normal: up to ~${h.high}`;
+}
+
+// Once-a-day check-in. Each tap saves immediately; tapping the selected option again clears it.
+function gutCheck(today, current) {
+  const value = { bloating: current?.bloating ?? null, pain: current?.pain ?? null };
+  const status = el('span', { class: 'tiny muted' }, current ? 'Saved ✓' : 'Takes 2 taps');
+  const scale = (field, labels, title) => {
+    const group = el('div', { class: 'scale four', role: 'group', 'aria-label': title });
+    const paint = () => [...group.children].forEach((b, i) => b.setAttribute('aria-pressed', String(value[field] === i)));
+    labels.forEach((label, i) => {
+      const [emoji, ...words] = label.split(' ');
+      group.append(el('button', { type: 'button', onclick: async () => {
+        const before = value[field];
+        value[field] = before === i ? null : i;
+        paint();
+        try {
+          await api('/gutcheck', { method: 'PUT', body: { date: today, ...value } });
+          status.textContent = 'Saved ✓';
+        } catch (err) {
+          value[field] = before;
+          paint();
+          toast(err.message || 'Couldn’t save. Check your connection.', { error: true });
+        }
+      } }, el('span', { class: 'e' }, emoji), words.join(' ')));
+    });
+    paint();
+    return el('div', { class: 'stack tight' }, el('strong', { class: 'small' }, title), group);
+  };
+  return el('section', { class: 'card stack tight gut' },
+    el('div', { class: 'row spread' }, el('h2', {}, '🩺 How’s your gut today?'), status),
+    scale('bloating', BLOATING, 'Bloating'),
+    scale('pain', PAIN, 'Belly pain'));
 }
 
 export async function renderToday(root, { refresh }) {
@@ -76,6 +110,7 @@ export async function renderToday(root, { refresh }) {
     el('div', { class: 'page-head' },
       el('div', {}, el('p', { class: 'muted small' }, prettyDate(today)), el('h1', {}, 'Today')),
       stats.streak > 0 && el('span', { class: 'pill fire', title: 'Logging streak' }, `🔥 ${stats.streak} day${stats.streak === 1 ? '' : 's'}`)),
+    gutCheck(today, stats.gut.today),
     el('div', { class: 'counters' }, counter('fart'), counter('burp')),
     el('div', { class: 'log-buttons' },
       el('button', { class: 'big-log fart', onclick: () => log('fart') }, el('span', { class: 'emoji' }, '💨'), 'Log a fart'),

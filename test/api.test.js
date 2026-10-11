@@ -299,60 +299,6 @@ describe('audio & community', () => {
   });
 });
 
-describe('premium gating & billing', () => {
-  let app;
-  before(async () => {
-    app = await makeApp({ stripe: { secretKey: 'sk_test_dummy', webhookSecret: 'whsec_test', priceId: 'price_x', mode: 'payment', priceLabel: '$4.99' } });
-  });
-  after(() => app.close());
-
-  test('free users get 30 days and no trigger insights', async () => {
-    const c = await member(app, 'freebie');
-    await c.post('/api/logs', { kind: 'fart', triggers: ['beans'], tzOffset: 0 });
-    const s = (await c.get(`/api/stats?today=${today()}&days=90`)).json;
-    assert.equal(s.days, 30);
-    assert.equal(s.limited, true);
-    assert.equal(s.triggers, null);
-    assert.equal(s.triggersLocked, true);
-    assert.equal((await c.get('/api/me')).json.config.billingEnabled, true);
-  });
-
-  test('signed webhook grants premium; bad signature rejected; replay ignored', async () => {
-    const c = await member(app, 'payer');
-    const userId = (await c.get('/api/me')).json.user.id;
-    const { default: Stripe } = await import('stripe');
-    const stripe = new Stripe('sk_test_dummy');
-    const payload = JSON.stringify({ id: 'evt_1', type: 'checkout.session.completed', data: { object: {
-      id: 'cs_1', mode: 'payment', payment_status: 'paid', client_reference_id: String(userId), customer: 'cus_1' } } });
-    const bad = await app.inject({ method: 'POST', url: '/api/billing/webhook', payload, headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=deadbeef' } });
-    assert.equal(bad.statusCode, 400);
-    const sig = stripe.webhooks.generateTestHeaderString({ payload, secret: 'whsec_test' });
-    const ok = await app.inject({ method: 'POST', url: '/api/billing/webhook', payload, headers: { 'content-type': 'application/json', 'stripe-signature': sig } });
-    assert.equal(ok.statusCode, 200);
-    assert.equal((await c.get('/api/me')).json.user.isPremium, true);
-    const s = (await c.get(`/api/stats?today=${today()}&days=90`)).json;
-    assert.equal(s.days, 90);
-    const replay = await app.inject({ method: 'POST', url: '/api/billing/webhook', payload, headers: { 'content-type': 'application/json', 'stripe-signature': sig } });
-    assert.equal(replay.json().duplicate, true);
-  });
-
-  test('checkout requires a claimed account', async () => {
-    const g = await guest(app);
-    assert.equal((await g.post('/api/billing/checkout')).status, 403);
-  });
-});
-
-describe('billing disabled', () => {
-  test('everything unlocked and billing routes 404', async () => {
-    const app = await makeApp();
-    const c = await guest(app);
-    assert.equal((await c.get('/api/me')).json.user.isPremium, true);
-    assert.equal((await c.get(`/api/stats?today=${today()}&days=365`)).json.days, 365);
-    assert.equal((await c.post('/api/billing/checkout')).status, 404);
-    await app.close();
-  });
-});
-
 describe('pages, headers & maintenance', () => {
   let app;
   before(async () => { app = await makeApp({ appName: 'GasPass' }); });
@@ -472,39 +418,63 @@ describe('review hardening', () => {
   });
 });
 
-describe('billing hardening', () => {
+describe('gut checks', () => {
   let app;
-  before(async () => {
-    app = await makeApp({ stripe: { secretKey: 'sk_test_dummy', webhookSecret: 'whsec_test', priceId: 'price_x', mode: 'subscription', priceLabel: '$2.99/mo' } });
-  });
+  before(async () => { app = await makeApp(); });
   after(() => app.close());
 
-  const send = async (event) => {
-    const payload = JSON.stringify(event);
-    const sig = app.stripe.webhooks.generateTestHeaderString({ payload, secret: 'whsec_test' });
-    return app.inject({ method: 'POST', url: '/api/billing/webhook', payload, headers: { 'content-type': 'application/json', 'stripe-signature': sig } });
-  };
-
-  test('subscription premium follows the real billing period; refunds revoke', async () => {
-    const c = await member(app, 'annual');
-    const userId = (await c.get('/api/me')).json.user.id;
-    const yearOut = Math.floor(Date.now() / 1000) + 365 * 86400;
-    app.stripe.subscriptions.retrieve = async () => ({ id: 'sub_1', items: { data: [{ current_period_end: yearOut }] } });
-    await send({ id: 'evt_a', type: 'checkout.session.completed', data: { object: { mode: 'subscription', payment_status: 'paid',
-      client_reference_id: String(userId), customer: 'cus_a', subscription: 'sub_1' } } });
-    const until = app.db.prepare('SELECT premium_until FROM users WHERE id = ?').get(userId).premium_until;
-    assert.ok(until > Date.now() + 360 * 86_400_000, 'annual plan lasts the year');
-    await send({ id: 'evt_b', type: 'charge.refunded', data: { object: { customer: 'cus_a', refunded: true } } });
-    assert.equal((await c.get('/api/me')).json.user.isPremium, false);
+  test('upsert, validate, clear, and feed stats / triggers / flags', async () => {
+    const c = await guest(app);
+    const DAY = 86_400_000;
+    const d = (n) => new Date(Date.now() - n * DAY).toISOString().slice(0, 10);
+    assert.equal((await c.put('/api/gutcheck', { date: d(0), bloating: 4 })).status, 400);
+    assert.equal((await c.put('/api/gutcheck', { date: d(40), bloating: 1 })).status, 400, 'too old');
+    assert.equal((await c.put('/api/gutcheck', { date: 'yesterday', bloating: 1 })).status, 400);
+    assert.equal((await client(app).put('/api/gutcheck', { date: d(0), bloating: 1 })).status, 401);
+    // Bloated on bean days (0, 2, 4), flat on the others.
+    for (let i = 0; i < 6; i++) {
+      const beans = i % 2 === 0;
+      assert.equal((await c.put('/api/gutcheck', { date: d(i), bloating: beans ? 3 : 0, pain: beans ? 2 : 0 })).status, 200);
+      await c.post('/api/logs', { kind: 'fart', triggers: beans ? ['beans'] : ['coffee'], occurredAt: Date.now() - i * DAY - 60_000, tzOffset: 0 });
+    }
+    const r = await c.put('/api/gutcheck', { date: d(1), bloating: 1, pain: null }); // re-save updates in place
+    assert.deepEqual(r.json, { date: d(1), bloating: 1, pain: null });
+    const s = (await c.get(`/api/stats?today=${d(0)}&days=7`)).json;
+    assert.deepEqual(s.gut.today, { bloating: 3, pain: 2 });
+    assert.equal(s.gut.checkedDays, 6);
+    assert.equal(s.gut.bloatedDays, 3);
+    assert.equal(s.gut.painDays, 3);
+    assert.equal(s.daily.at(-2).bloating, 1);
+    assert.equal(s.daily.at(-2).pain, null);
+    const beans = s.triggers.find((t) => t.id === 'beans');
+    assert.equal(beans.bloatWith, 3);
+    assert.equal(beans.bloatWithout, 0.3); // days 1, 3, 5 → (1 + 0 + 0) / 3
+    assert.ok(s.flags.includes('bloating') && s.flags.includes('pain'));
+    assert.ok(s.streak >= 6);
+    const csv = (await c.get('/api/export.csv')).res.body;
+    assert.match(csv, new RegExp(`,gut_check,,,${d(0)},.*,3,2\\r\\n`));
   });
 
-  test('account is kept when the subscription cannot be cancelled', async () => {
-    const c = await member(app, 'subscriber');
-    app.db.prepare("UPDATE users SET stripe_subscription_id = 'sub_x', premium_until = ? WHERE username = 'subscriber'").run(Date.now() + 86_400_000);
-    app.stripe.subscriptions.cancel = async () => { throw Object.assign(new Error('Stripe down'), { code: 'api_error' }); };
-    assert.equal((await c.del('/api/me', { confirm: 'subscriber' })).status, 502);
-    assert.equal((await c.get('/api/me')).json.user.username, 'subscriber');
-    app.stripe.subscriptions.cancel = async () => ({ status: 'canceled' });
-    assert.equal((await c.del('/api/me', { confirm: 'subscriber' })).status, 200);
+  test('guest gut checks move into the account on login (account wins same-day conflicts)', async () => {
+    const m = await member(app, 'checker', 'password123');
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    await m.put('/api/gutcheck', { date: today, bloating: 2 });
+    const g = await guest(app);
+    await g.put('/api/gutcheck', { date: today, bloating: 0 });
+    await g.put('/api/gutcheck', { date: yesterday, bloating: 1 });
+    assert.equal((await g.post('/api/auth/login', { username: 'checker', password: 'password123' })).status, 200);
+    const s = (await g.get(`/api/stats?today=${today}&days=7`)).json;
+    assert.equal(s.gut.today.bloating, 2);
+    assert.equal(s.daily.at(-2).bloating, 1);
+  });
+
+  test('all history and trigger insights are free', async () => {
+    const c = await guest(app);
+    await c.post('/api/logs', { kind: 'fart', triggers: ['dairy'], tzOffset: 0 });
+    const s = (await c.get(`/api/stats?today=${today()}&days=365`)).json;
+    assert.equal(s.days, 365);
+    assert.equal(s.triggers[0].id, 'dairy');
+    assert.equal((await c.get('/api/me')).json.user.isPremium, undefined);
   });
 });

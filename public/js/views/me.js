@@ -3,18 +3,6 @@ import { api } from '../api.js';
 import { state } from '../state.js';
 import { whatsNormal } from './today.js';
 
-export async function startCheckout() {
-  if (!state.me || state.me.isGuest) {
-    toast('Claim a username first — Premium is tied to your account.');
-    location.hash = '#/me';
-    return;
-  }
-  try {
-    const { url } = await api('/billing/checkout', { method: 'POST' });
-    location.href = url;
-  } catch (err) { toast(err.message, { error: true }); }
-}
-
 export function showRecoveryCode(code) {
   return sheet('Save your recovery code', (close) => el('div', { class: 'stack' },
     el('p', {}, 'This is the ONLY way back in if you forget your password. We don’t collect emails, so we can’t reset it for you.'),
@@ -65,8 +53,6 @@ export async function renderMe(root, { refresh, reboot }) {
   const me = state.me;
   const cfg = state.config;
   const { blocks } = await api('/blocks');
-  const params = new URLSearchParams(location.hash.split('?')[1]);
-  if (params.get('premium') === 'success') { toast('Thank you! Premium unlocks in a few seconds ⭐', { ms: 4000 }); history.replaceState(null, '', '#/me'); }
 
   const account = me.isGuest
     ? el('section', { class: 'card stack' },
@@ -81,7 +67,7 @@ export async function renderMe(root, { refresh, reboot }) {
       el('div', { class: 'divider' }),
       el('button', { class: 'btn ghost sm', onclick: () => loginSheet(reboot) }, 'Already have an account? Log in (keeps today’s logs)'))
     : el('section', { class: 'card stack tight' },
-      el('div', { class: 'row' }, el('h2', { class: 'grow' }, `@${me.username}`), me.isPremium && cfg.billingEnabled && el('span', { class: 'pill star' }, '⭐ Premium')),
+      el('h2', {}, `@${me.username}`),
       el('p', { class: 'small muted' }, `Member since ${new Date(me.createdAt).toLocaleDateString([], { month: 'long', year: 'numeric' })}`),
       me.banned && el('p', { class: 'small error' }, 'Your community access is suspended. Your private tracking still works.'),
       el('div', { class: 'row wrap' },
@@ -90,18 +76,9 @@ export async function renderMe(root, { refresh, reboot }) {
           'Change password', async (data) => { await api('/auth/password', { method: 'POST', body: data }); close(); toast('Password changed 🔒'); })) }, '🔒 Change password'),
         el('button', { class: 'btn sm', onclick: async () => { await api('/auth/logout', { method: 'POST' }); reboot(); } }, 'Log out')));
 
-  const premiumCard = cfg.billingEnabled && el('section', { class: `card ${me.isPremium ? 'soft' : 'brand'} stack tight` },
-    me.isPremium
-      ? [el('h2', {}, '⭐ You’re Premium'), el('p', { class: 'small muted' }, 'Full history, trigger insights and the doctor report are unlocked. Thank you for keeping the gas flowing!'),
-        cfg.premiumMode === 'subscription' && el('button', { class: 'btn sm', onclick: async () => { try { location.href = (await api('/billing/portal', { method: 'POST' })).url; } catch (err) { toast(err.message, { error: true }); } } }, 'Manage subscription')]
-      : [el('h2', {}, '⭐ Go Premium'),
-        el('ul', { class: 'flags small' }, ['Trigger insights: which foods line up with your gas', '90-day & 1-year history', 'Printable doctor report', '⭐ Supporter badge in the community'].map((x) => el('li', {}, x))),
-        el('button', { class: 'btn white', onclick: startCheckout }, `Unlock — ${cfg.premiumPrice}`)]);
-
   root.replaceChildren(el('div', { class: 'page' },
     el('div', { class: 'page-head' }, el('h1', {}, 'Me')),
     account,
-    premiumCard,
     whatsNormal(),
     blocks.length > 0 && el('section', { class: 'card stack tight' }, el('h2', {}, '🚫 Blocked'),
       blocks.map((u) => el('div', { class: 'list-row' }, el('span', { class: 'grow' }, `@${u}`),
@@ -115,7 +92,7 @@ export async function renderMe(root, { refresh, reboot }) {
       el('div', { class: 'row wrap' },
         el('a', { href: '/privacy', target: '_blank' }, 'Privacy'), '·', el('a', { href: '/terms', target: '_blank' }, 'Terms'),
         cfg.supportEmail && ['·', el('a', { href: `mailto:${cfg.supportEmail}` }, 'Contact support')]),
-      el('p', { class: 'tiny muted' }, `${cfg.appName} is for fun and general wellness. It isn’t a medical device and doesn’t diagnose anything.`))));
+      el('p', { class: 'tiny muted' }, `${cfg.appName} is free, for general wellness and a laugh. It isn’t a medical device and doesn’t diagnose anything.`))));
 }
 
 async function deleteAccount(me, reboot) {

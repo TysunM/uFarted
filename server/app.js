@@ -5,14 +5,12 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import Stripe from 'stripe';
 import { openDb } from './db.js';
 import { createSessionStore, cookieOptions, COOKIE } from './auth.js';
 import { createAudioService } from './audio.js';
 import authRoutes from './routes/auth.js';
 import logRoutes from './routes/logs.js';
 import communityRoutes from './routes/community.js';
-import billingRoutes from './routes/billing.js';
 import pageRoutes from './routes/pages.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,7 +30,6 @@ export async function buildApp(cfg, { logger = true } = {}) {
   app.decorate('db', db);
   app.decorate('sessions', sessions);
   app.decorate('audio', audio);
-  app.decorate('stripe', cfg.billingEnabled ? new Stripe(cfg.stripe.secretKey) : null);
   app.decorateRequest('user', null);
   app.addHook('onClose', async () => db.close());
 
@@ -46,7 +43,7 @@ export async function buildApp(cfg, { logger = true } = {}) {
         imgSrc: ["'self'", 'data:', 'blob:'],
         mediaSrc: ["'self'", 'blob:'],
         connectSrc: ["'self'"],
-        formAction: ["'self'", 'https://checkout.stripe.com', 'https://billing.stripe.com'],
+        formAction: ["'self'"],
         frameAncestors: ["'none'"],
         upgradeInsecureRequests: cfg.production ? [] : null,
       },
@@ -63,13 +60,12 @@ export async function buildApp(cfg, { logger = true } = {}) {
       req.user = row;
       req.user.isGuest = !row.username;
       req.user.isAdmin = Boolean(row.username && row.is_admin);
-      req.user.isPremium = !cfg.billingEnabled || (row.premium_until ?? 0) > Date.now();
     }
   });
 
   // CSRF defence in depth (on top of SameSite=Lax cookies and JSON-only bodies).
   app.addHook('onRequest', async (req, reply) => {
-    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.url.startsWith('/api/billing/webhook')) return;
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return;
     if (req.headers['sec-fetch-site'] === 'cross-site') return reply.code(403).send({ error: 'Cross-site request blocked.' });
     const origin = req.headers.origin;
     if (origin && origin !== 'null') {
@@ -113,7 +109,6 @@ export async function buildApp(cfg, { logger = true } = {}) {
   await app.register(authRoutes, { prefix: '/api' });
   await app.register(logRoutes, { prefix: '/api' });
   await app.register(communityRoutes, { prefix: '/api' });
-  await app.register(billingRoutes, { prefix: '/api/billing' });
   await app.register(pageRoutes, { templateDir: TEMPLATE_DIR });
 
   app.setNotFoundHandler((req, reply) => reply.code(404).send({ error: 'Not found.' }));

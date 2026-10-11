@@ -10,7 +10,7 @@ export default async function communityRoutes(app) {
 
   // Visible = not hidden by moderation, author not banned, and author not blocked by the viewer.
   const visible = `p.hidden = 0 AND u.banned = 0 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.user_id = @viewer AND b.blocked_id = p.user_id)`;
-  const select = `SELECT p.*, u.username, (u.premium_until > @now) AS supporter,
+  const select = `SELECT p.*, u.username,
       (SELECT emoji FROM reactions r WHERE r.post_id = p.id AND r.user_id = @viewer) AS mine
     FROM posts p JOIN users u ON u.id = p.user_id`;
   const q = {
@@ -51,7 +51,7 @@ export default async function communityRoutes(app) {
     return rows.map((r) => ({
       id: r.id, username: r.username, kind: r.kind, type: r.type, audioId: r.audio_id, durationMs: r.audio_ms,
       peaks: JSON.parse(r.peaks), createdAt: r.created_at, reactions: counts.get(r.id) || {}, mine: r.mine,
-      score: r.score, supporter: cfg.billingEnabled && Boolean(r.supporter), hidden: Boolean(r.hidden),
+      score: r.score, hidden: Boolean(r.hidden),
     }));
   }
   const params = (req, extra = {}) => ({ viewer: req.user?.id ?? 0, now: Date.now(), ...extra });

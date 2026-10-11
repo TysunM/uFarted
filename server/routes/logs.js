@@ -72,6 +72,11 @@ export default async function logRoutes(app) {
     bothEnds: db.prepare(`SELECT 1 FROM logs WHERE user_id = ? GROUP BY local_date
                           HAVING COUNT(DISTINCT kind) = 2 LIMIT 1`),
     exportAll: db.prepare('SELECT * FROM logs WHERE user_id = ? ORDER BY occurred_at'),
+    rangeChecks: db.prepare('SELECT local_date, bloating, pain FROM gut_checks WHERE user_id = ? AND local_date BETWEEN ? AND ?'),
+    checkDates: db.prepare('SELECT local_date FROM gut_checks WHERE user_id = ? AND local_date <= ?'),
+    upsertCheck: db.prepare(`INSERT INTO gut_checks (user_id, local_date, bloating, pain, updated_at) VALUES (@userId, @date, @bloating, @pain, @now)
+                             ON CONFLICT (user_id, local_date) DO UPDATE SET bloating = excluded.bloating, pain = excluded.pain, updated_at = excluded.updated_at`),
+    exportChecks: db.prepare('SELECT * FROM gut_checks WHERE user_id = ? ORDER BY local_date'),
   };
 
   function normalize(body, existing) {
@@ -174,18 +179,33 @@ export default async function logRoutes(app) {
   app.get('/stats', { preHandler: requireUser }, async (req, reply) => {
     const today = todayParam(req, reply);
     if (!today) return reply;
-    const premium = req.user.isPremium;
-    const requested = Math.min(Math.max(Number.parseInt(req.query.days, 10) || 7, 1), 365);
-    const days = premium ? requested : Math.min(requested, cfg.freeHistoryDays);
-    const lookback = Math.max(days, 7);
+    const days = Math.min(Math.max(Number.parseInt(req.query.days, 10) || 7, 1), 365);
+    const from = addDays(today, -(Math.max(days, 7) - 1));
     const t = q.totals.get(req.user.id);
-    const stats = computeStats({
-      today, days, premium,
-      rows: q.rangeRows.all(req.user.id, addDays(today, -(lookback - 1)), today),
+    return computeStats({
+      today, days,
+      rows: q.rangeRows.all(req.user.id, from, today),
+      checks: q.rangeChecks.all(req.user.id, from, today),
       dayTotals: q.dayTotals.all(req.user.id, today),
-      totals: { ...t, symphony: Boolean(q.symphony.get(req.user.id)), bothEnds: Boolean(q.bothEnds.get(req.user.id)) },
+      totals: { ...t, symphony: Boolean(q.symphony.get(req.user.id)), bothEnds: Boolean(q.bothEnds.get(req.user.id)),
+        checkDates: q.checkDates.all(req.user.id, today).map((r) => r.local_date) },
     });
-    return { ...stats, limited: days < requested };
+  });
+
+  // Daily gut check (bloating + belly pain). One per local day; re-saving updates it. null clears a field.
+  app.put('/gutcheck', {
+    preHandler: requireUser,
+    config: { rateLimit: { max: 120, timeWindow: '1 hour', keyGenerator: userKey } },
+    schema: { body: { type: 'object', required: ['date'], additionalProperties: false, properties: {
+      date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      bloating: { type: ['integer', 'null'], minimum: 0, maximum: 3 },
+      pain: { type: ['integer', 'null'], minimum: 0, maximum: 3 } } } },
+  }, async (req, reply) => {
+    const nowUtc = new Date().toISOString().slice(0, 10);
+    const { date } = req.body;
+    if (date > addDays(nowUtc, 1) || date < addDays(nowUtc, -30)) return reply.code(400).send({ error: 'Gut checks can be edited for the last 30 days.' });
+    q.upsertCheck.run({ userId: req.user.id, date, bloating: req.body.bloating ?? null, pain: req.body.pain ?? null, now: Date.now() });
+    return { date, bloating: req.body.bloating ?? null, pain: req.body.pain ?? null };
   });
 
   app.get('/export.csv', { preHandler: requireUser, config: { rateLimit: { max: 10, timeWindow: '1 hour', keyGenerator: userKey } } },
@@ -195,9 +215,13 @@ export default async function logRoutes(app) {
         if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; // neutralise spreadsheet formula injection
         return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       };
-      const header = ['id', 'kind', 'type', 'occurred_at_utc', 'local_date', 'local_hour', 'smell_0_4', 'discomfort_0_3', 'triggers', 'note', 'has_recording'];
-      const lines = q.exportAll.all(req.user.id).map((r) => [r.id, r.kind, r.type, new Date(r.occurred_at).toISOString(),
-        r.local_date, r.local_hour, r.smell, r.discomfort, JSON.parse(r.triggers).join('|'), r.note, r.audio_id ? 'yes' : 'no'].map(cell).join(','));
+      const header = ['id', 'kind', 'type', 'occurred_at_utc', 'local_date', 'local_hour', 'smell_0_4', 'discomfort_0_3', 'triggers', 'note',
+        'has_recording', 'bloating_0_3', 'pain_0_3'];
+      const lines = [
+        ...q.exportAll.all(req.user.id).map((r) => [r.id, r.kind, r.type, new Date(r.occurred_at).toISOString(), r.local_date, r.local_hour,
+          r.smell, r.discomfort, JSON.parse(r.triggers).join('|'), r.note, r.audio_id ? 'yes' : 'no', '', '']),
+        ...q.exportChecks.all(req.user.id).map((c) => ['', 'gut_check', '', '', c.local_date, '', '', '', '', '', '', c.bloating, c.pain]),
+      ].map((row) => row.map(cell).join(','));
       reply.header('Content-Type', 'text/csv; charset=utf-8');
       reply.header('Content-Disposition', `attachment; filename="${cfg.appName.toLowerCase()}-export.csv"`);
       return [header.join(','), ...lines].join('\r\n') + '\r\n';

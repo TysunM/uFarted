@@ -1,14 +1,14 @@
 {
-  "name": "{{APP}} — gas tracker",
+  "name": "{{APP}} — gut health tracker",
   "short_name": "{{APP}}",
-  "description": "Log farts & burps, record them, and track your gut health. Fun first, science-backed.",
+  "description": "Free gut-health tracker with a sense of humor: bloating check-ins, food triggers, fart & burp logs, doctor report.",
   "start_url": "/#/today",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#fbf7f0",
   "theme_color": "#7c3aed",
-  "categories": ["health", "lifestyle", "entertainment"],
+  "categories": ["health", "lifestyle", "medical"],
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },

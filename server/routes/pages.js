@@ -36,7 +36,7 @@ export default async function pageRoutes(app, { templateDir }) {
     if (post) {
       const t = typeInfo(post.kind, post.type);
       const title = `${t.emoji} ${t.name} by @${post.username}`;
-      const desc = `Hear this ${KINDS[post.kind].name.toLowerCase()} on ${cfg.appName} — the fun, science-backed gas tracker.`;
+      const desc = `Hear this ${KINDS[post.kind].name.toLowerCase()} on ${cfg.appName} — free gut-health tracking with a sense of humor.`;
       const base = cfg.publicUrl || `${req.protocol}://${req.headers.host}`;
       const meta = [
         `<meta property="og:title" content="${esc(title)}">`,

@@ -8,7 +8,6 @@ import { buildApp } from '../server/app.js';
 export async function makeApp(overrides = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-test-'));
   const cfg = loadConfig({ dataDir, ...overrides });
-  if (overrides.stripe) cfg.billingEnabled = true;
   const app = await buildApp(cfg, { logger: false });
   app.addHook('onClose', async () => fs.rmSync(dataDir, { recursive: true, force: true }));
   return app;

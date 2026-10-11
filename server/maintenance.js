@@ -21,7 +21,6 @@ export async function runMaintenance(app) {
     .all({ cutoff }).map((r) => r.audio_id);
   const guests = db.prepare(`DELETE FROM users WHERE ${orphanFilter}`).run({ cutoff }).changes;
   await audio.remove(orphanAudio);
-  db.prepare('DELETE FROM stripe_events WHERE created_at < ?').run(now - 90 * DAY);
   db.pragma('optimize');
   log.info({ backup: file, expiredSessions: expired, guestsRemoved: guests }, 'maintenance complete');
   return { file, expired, guests };

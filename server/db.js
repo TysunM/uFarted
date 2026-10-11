@@ -12,9 +12,7 @@ const MIGRATIONS = [
     created_at INTEGER NOT NULL,
     last_seen_at INTEGER NOT NULL,
     banned INTEGER NOT NULL DEFAULT 0,
-    premium_until INTEGER,
-    stripe_customer_id TEXT,
-    stripe_subscription_id TEXT
+    is_admin INTEGER NOT NULL DEFAULT 0 -- granted from the CLI only
   );
   CREATE TABLE sessions (
     token_hash TEXT PRIMARY KEY,
@@ -77,11 +75,16 @@ const MIGRATIONS = [
     created_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, blocked_id)
   );
-  CREATE TABLE stripe_events (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
+  -- Once-a-day gut check: how bloated / sore the belly felt (0 none … 3 severe).
+  CREATE TABLE gut_checks (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    local_date TEXT NOT NULL,
+    bloating INTEGER CHECK (bloating BETWEEN 0 AND 3),
+    pain INTEGER CHECK (pain BETWEEN 0 AND 3),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, local_date)
+  );
   `,
-  // v2: admin is a database flag granted from the CLI (a configured name could be claimed by anyone).
-  `ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
-   CREATE INDEX users_customer ON users(stripe_customer_id);`,
 ];
 
 export function openDb(cfg) {

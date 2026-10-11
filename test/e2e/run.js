@@ -29,12 +29,21 @@ try {
 
   step('welcome → start as guest');
   await page.goto(base);
-  await page.getByText('The fun, science-backed gas tracker.').waitFor();
+  await page.getByText('Gut health, with a sense of humor. Free.').waitFor();
   await page.screenshot({ path: `${shots}01-welcome.png` });
   assert.equal(await page.getByRole('button', { name: /Start tracking/ }).isDisabled(), true, 'age gate');
   await page.locator('#age').check();
   await page.getByRole('button', { name: /Start tracking/ }).click();
-  await page.getByRole('heading', { name: 'Today' }).waitFor();
+  await page.getByRole('heading', { name: 'Today', exact: true }).waitFor();
+
+  step('daily gut check: 2 taps, persists across reloads');
+  await page.getByRole('group', { name: 'Bloating' }).getByRole('button', { name: /Bloated/ }).click();
+  await page.getByText('Saved ✓').waitFor();
+  await page.getByRole('group', { name: 'Belly pain' }).getByRole('button', { name: /Mild/ }).click();
+  await page.reload();
+  await page.getByRole('heading', { name: 'Today', exact: true }).waitFor();
+  assert.equal(await page.getByRole('group', { name: 'Bloating' }).getByRole('button', { name: /Bloated/ }).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.getByRole('group', { name: 'Belly pain' }).getByRole('button', { name: /Mild/ }).getAttribute('aria-pressed'), 'true');
 
   step('log a fart with type, smell, trigger and a recording');
   await page.getByRole('button', { name: 'Log a fart' }).click();
@@ -110,13 +119,14 @@ try {
 
   step('insights');
   await page.getByRole('link', { name: /Insights/ }).click();
-  await page.getByRole('heading', { name: 'Per day' }).waitFor();
+  await page.getByRole('heading', { name: '🩺 Gut health' }).waitFor();
+  await page.getByText(/Bloating 2\/3 on days with it/).waitFor();
   await page.screenshot({ path: `${shots}07-insights.png`, fullPage: true });
 
   step('dark mode + public share link');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.getByRole('link', { name: /Today/ }).click();
-  await page.getByRole('heading', { name: 'Today' }).waitFor();
+  await page.getByRole('heading', { name: 'Today', exact: true }).waitFor();
   await page.screenshot({ path: `${shots}08-today-dark.png`, fullPage: true });
   const postId = (await (await page.request.get(`${base}/api/posts`)).json()).posts[0].id;
   const anon = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage();
@@ -128,7 +138,8 @@ try {
   step('doctor report');
   const report = await ctx.newPage();
   await report.goto(`${base}/report`);
-  await report.getByText('Gas & bloating summary').waitFor();
+  await report.getByText('Bloating & gas summary').waitFor();
+  await report.getByText('Days with moderate/severe bloating').waitFor();
   await report.screenshot({ path: `${shots}10-report.png`, fullPage: true });
 
   const csp = errors.filter((e) => /Content Security Policy|Refused/.test(e));

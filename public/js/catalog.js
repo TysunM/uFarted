@@ -101,6 +101,9 @@ export const TRIGGER_IDS = new Set(TRIGGERS.map((t) => t.id));
 
 export const SMELL = ['😇 None', '🙂 Faint', '😐 Noticeable', '🤢 Strong', '☠️ Toxic'];
 export const DISCOMFORT = ['None', 'Mild', 'Moderate', 'Severe'];
+// Daily gut check scales (0–3).
+export const BLOATING = ['😌 Flat', '🙂 A little', '😣 Bloated', '🎈 Balloon'];
+export const PAIN = ['😊 None', '😐 Mild', '😖 Moderate', '😫 Severe'];
 
 export const REACTIONS = [
   { id: 'laugh', emoji: '😂' },
@@ -138,7 +141,7 @@ export const HEALTH = {
     'Blood in your poo, or black / tarry stools',
     'Losing weight without trying',
     'Severe or sudden stomach pain',
-    'Bloating, diarrhoea or constipation that won’t go away',
+    'Bloating that won’t go away, or diarrhoea / constipation that won’t settle',
     'Trouble swallowing, persistent vomiting or heartburn',
     'Chest pain with burping — get urgent help',
   ],
@@ -159,4 +162,5 @@ export const BADGES = [
   { id: 'recorder', emoji: '🎙️', name: 'Sound Engineer', desc: 'Recorded your first clip.' },
   { id: 'night_owl', emoji: '🦉', name: 'Night Owl', desc: 'Logged one between midnight and 4 am.' },
   { id: 'bilingual', emoji: '↕️', name: 'Both Ends', desc: 'Logged a fart and a burp in the same day.' },
+  { id: 'gut_feeling', emoji: '🩺', name: 'Gut Feeling', desc: '7 daily gut checks.' },
 ];
