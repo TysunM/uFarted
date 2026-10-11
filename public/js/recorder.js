@@ -7,7 +7,7 @@ export const canRecord = () => Boolean(navigator.mediaDevices?.getUserMedia && w
  * Recording widget. Calls onDone(blob) when a take finishes (auto-stops at maxSeconds).
  * Returns { node, stop } so the caller can abort when the sheet closes.
  */
-export function recorderWidget({ maxSeconds, onDone, onError }) {
+export function recorderWidget({ maxSeconds, onDone, onError, onCancel }) {
   const meter = el('i');
   const timer = el('span', { class: 'timer' }, '0:00');
   const stopBtn = el('button', { type: 'button', class: 'btn sm primary' }, '■ Stop');
@@ -15,8 +15,9 @@ export function recorderWidget({ maxSeconds, onDone, onError }) {
     el('div', { class: 'rec-live' }, el('span', { class: 'rec-dot' }), el('div', { class: 'meter' }, meter), timer, stopBtn),
     el('p', { class: 'tiny muted' }, `Hold the phone close. Max ${maxSeconds}s — it stops automatically.`));
 
-  let stream, rec, ctx, raf, tick, stopped = false;
+  let stream, rec, ctx, raf, tick, stopped = false, settled = false;
   const chunks = [];
+  const settle = (fn, arg) => { if (!settled) { settled = true; fn?.(arg); } };
   const cleanup = () => {
     cancelAnimationFrame(raf);
     clearInterval(tick);
@@ -26,7 +27,9 @@ export function recorderWidget({ maxSeconds, onDone, onError }) {
   const stop = () => {
     if (stopped) return;
     stopped = true;
-    if (rec && rec.state !== 'inactive') rec.stop(); else cleanup();
+    if (rec && rec.state !== 'inactive') return rec.stop(); // onstop delivers the take
+    cleanup();
+    settle(onCancel); // stopped before the mic even opened
   };
   stopBtn.addEventListener('click', stop);
 
@@ -40,7 +43,7 @@ export function recorderWidget({ maxSeconds, onDone, onError }) {
       rec.onstop = () => {
         cleanup();
         const blob = new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/webm' });
-        if (blob.size > 0) onDone(blob); else onError?.('Nothing was recorded. Try again.');
+        if (blob.size > 0) settle(onDone, blob); else settle(onError, 'Nothing was recorded. Try again.');
       };
       rec.start(250);
       const started = Date.now();
@@ -68,7 +71,7 @@ export function recorderWidget({ maxSeconds, onDone, onError }) {
     } catch (err) {
       stopped = true;
       cleanup();
-      onError?.(err?.name === 'NotAllowedError'
+      settle(onError, err?.name === 'NotAllowedError'
         ? 'Microphone is blocked. Allow it in your browser settings to record.'
         : 'Couldn’t start the microphone on this device.');
     }

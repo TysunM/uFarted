@@ -26,6 +26,7 @@ function postCard(post, { refresh, featured = false }) {
     class: 'react', 'aria-pressed': String(p.mine === r.id), 'aria-label': `React ${r.emoji}`,
     onclick: async () => {
       if (!state.me) return toast('Start tracking to react 💨');
+      if (state.me.isGuest) return toast('Claim a username on the Me tab to react 🙋');
       try {
         const res = await api(`/posts/${p.id}/reaction`, { method: 'PUT', body: { emoji: p.mine === r.id ? null : r.id } });
         Object.assign(p, res.post);
@@ -39,7 +40,7 @@ function postCard(post, { refresh, featured = false }) {
     const choice = await sheet('Options', (close) => el('div', { class: 'menu' },
       el('button', { class: 'btn block', onclick: () => close('share') }, '🔗 Share link'),
       mine && el('button', { class: 'btn block danger', onclick: () => close('delete') }, '🗑️ Delete post'),
-      !mine && state.me && el('button', { class: 'btn block', onclick: () => close('report') }, '🚩 Report'),
+      !mine && state.me && !state.me.isGuest && el('button', { class: 'btn block', onclick: () => close('report') }, '🚩 Report'),
       !mine && state.me && el('button', { class: 'btn block', onclick: () => close('block') }, `🚫 Block @${post.username}`),
       state.me?.isAdmin && !mine && el('button', { class: 'btn block danger', onclick: () => close('delete') }, '🛡️ Remove (admin)')));
     try {
@@ -74,15 +75,17 @@ export async function renderCommunity(root, { refresh, focusId }) {
   const list = el('div', { class: 'stack' });
   const moreBtn = el('button', { class: 'btn block hidden' }, 'Load more');
   let cursor = null;
-  let offset = 0;
+  let since = null;
+  const shown = new Set(focusId ? [focusId] : []);
 
   const load = async () => {
     moreBtn.disabled = true;
-    const qs = sort === 'top' ? `sort=top&offset=${offset}` : `sort=${sort}${cursor ? `&before=${cursor}` : ''}`;
-    const { posts } = await api(`/posts?${qs}`);
-    list.append(...posts.filter((p) => p.id !== focusId).map((p) => postCard(p, { refresh })));
-    offset += posts.length;
-    cursor = posts.at(-1)?.id ?? cursor;
+    const qs = sort === 'top' ? `sort=top${cursor ? `&cursor=${cursor}&since=${since}` : ''}` : `sort=${sort}${cursor ? `&before=${cursor}` : ''}`;
+    const res = await api(`/posts?${qs}`);
+    const { posts } = res;
+    list.append(...posts.filter((p) => !shown.has(p.id)).map((p) => { shown.add(p.id); return postCard(p, { refresh }); }));
+    cursor = (sort === 'top' ? res.cursor : posts.at(-1)?.id) ?? cursor;
+    since = res.since ?? since;
     moreBtn.classList.toggle('hidden', posts.length < 20);
     moreBtn.disabled = false;
     if (!list.children.length && !focusId) {

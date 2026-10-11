@@ -68,6 +68,19 @@ try {
   assert.equal(await page.locator('.counter.fart .num b').textContent(), '1');
   assert.equal(await page.locator('.counter.burp .num b').textContent(), '2');
 
+  step('Save tapped while the mic is still opening saves the entry (no stuck sheet)');
+  await page.evaluate(() => {
+    const md = navigator.mediaDevices;
+    window.__gum = md.getUserMedia.bind(md);
+    md.getUserMedia = (c) => new Promise((r) => setTimeout(() => r(window.__gum(c)), 1500)); // slow permission prompt
+  });
+  await page.getByRole('button', { name: 'Log a fart' }).click();
+  await page.getByRole('button', { name: /Record it/ }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Classic logged!').waitFor({ timeout: 8000 });
+  await page.locator('.backdrop').waitFor({ state: 'detached' });
+  await page.evaluate(() => { navigator.mediaDevices.getUserMedia = window.__gum; });
+
   step('claim username → recovery code');
   await page.getByRole('link', { name: /Me/ }).click();
   await page.locator('input[name=username]').fill('thunder_buns');

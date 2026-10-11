@@ -1,7 +1,6 @@
 import path from 'node:path';
 
 const env = process.env;
-const list = (v) => (v || '').split(',').map((s) => s.trim()).filter(Boolean);
 const int = (v, d) => (Number.isFinite(Number.parseInt(v, 10)) ? Number.parseInt(v, 10) : d);
 
 export function loadConfig(overrides = {}) {
@@ -19,7 +18,6 @@ export function loadConfig(overrides = {}) {
     backupDir: path.join(dataDir, 'backups'),
     backupKeep: int(env.BACKUP_KEEP, 7),
     supportEmail: env.SUPPORT_EMAIL || '',
-    adminUsernames: list(env.ADMIN_USERNAMES).map((u) => u.toLowerCase()),
     reportHideThreshold: int(env.REPORT_HIDE_THRESHOLD, 3),
     modWebhookUrl: env.MOD_WEBHOOK_URL || '',
     maxClipSeconds: int(env.MAX_CLIP_SECONDS, 15),

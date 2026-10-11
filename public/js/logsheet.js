@@ -1,6 +1,6 @@
 import { KINDS, TRIGGERS, SMELL, DISCOMFORT, typeInfo } from './catalog.js';
 import { el, sheet, toast, confirmSheet, segmented, pad } from './ui.js';
-import { api, createLog } from './api.js';
+import { api, createLog, ApiError } from './api.js';
 import { recorderWidget, canRecord } from './recorder.js';
 import { player, stopPlayback } from './player.js';
 import { state } from './state.js';
@@ -120,6 +120,7 @@ export function openLogSheet({ kind = 'fart', log = null } = {}) {
         maxSeconds: state.config.maxClipSeconds || 15,
         onDone: (b) => { blob = b; recorder = null; renderAudio(); if (pendingSave) { pendingSave = false; saveBtn.click(); } },
         onError: (msg) => { recorder = null; pendingSave = false; toast(msg, { error: true, ms: 4500 }); renderAudio(); },
+        onCancel: () => { recorder = null; renderAudio(); if (pendingSave) { pendingSave = false; saveBtn.click(); } },
       });
       renderAudio();
     }
@@ -139,10 +140,11 @@ export function openLogSheet({ kind = 'fart', log = null } = {}) {
       saveBtn.disabled = true;
       saveBtn.textContent = blob ? 'Uploading clip…' : 'Saving…';
       try {
-        let saved = createdId ? await api(`/logs/${createdId}`, { method: 'PATCH', body: payload }) : await createLog(payload);
+        let saved = createdId ? await api(`/logs/${createdId}`, { method: 'PATCH', body: payload })
+          : blob ? await api('/logs', { method: 'POST', body: payload }) : await createLog(payload);
         if (saved.id) createdId = saved.id;
         if (saved.offline) {
-          toast(blob ? 'Saved offline — the clip needs a connection 📶' : 'Saved offline — will sync when you’re back 📶');
+          toast('Saved offline — will sync when you’re back 📶');
           return close(true);
         }
         if (removeAudio && !blob && saved.hasAudio) saved = await api(`/logs/${saved.id}/audio`, { method: 'DELETE' });
@@ -157,7 +159,8 @@ export function openLogSheet({ kind = 'fart', log = null } = {}) {
         toast(editing ? 'Updated ✅' : `${t.emoji} ${t.name} logged!${share ? ' Shared 🌍' : ''}`);
         close(true);
       } catch (err) {
-        error.textContent = err.message || 'Couldn’t save. Check your connection.';
+        error.textContent = err instanceof ApiError ? err.message
+          : blob ? 'You’re offline. Clips need a connection — try again, or remove the clip to save offline.' : 'Couldn’t save. Check your connection.';
         saveBtn.disabled = false;
         saveBtn.textContent = editing ? 'Save changes' : 'Save';
       }

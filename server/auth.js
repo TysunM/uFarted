@@ -75,6 +75,7 @@ export function createSessionStore(db) {
       if (row.expires_at - now < (SESSION_DAYS - 1) * DAY) {
         q.touch.run(now + SESSION_DAYS * DAY, row.token_hash);
         q.seen.run(now, row.id);
+        row.refreshed = true; // caller must re-send the cookie, or the browser still expires it on the old date
       }
       return row;
     },

@@ -245,6 +245,7 @@ describe('audio & community', () => {
     const { postId, log } = await postedClip(author);
     const r1 = await member(app, 'rep1');
     const r2 = await member(app, 'rep2');
+    app.db.prepare("UPDATE users SET created_at = 0 WHERE username IN ('rep1', 'rep2')").run(); // trusted (aged) accounts
     assert.equal((await author.post(`/api/posts/${postId}/report`, { reason: 'spam' })).status, 400, 'no self-report');
     assert.equal((await r1.post(`/api/posts/${postId}/report`, { reason: 'bad' })).status, 400);
     await r1.post(`/api/posts/${postId}/report`, { reason: 'spam' });
@@ -383,5 +384,127 @@ describe('pages, headers & maintenance', () => {
     assert.ok(fs.existsSync(res.file));
     assert.ok(res.guests >= 1);
     assert.equal((await keep.get('/api/me')).json.user.username, 'keeper', 'claimed accounts are never purged');
+  });
+});
+
+describe('review hardening', () => {
+  let app;
+  before(async () => { app = await makeApp({ reportHideThreshold: 2 }); });
+  after(() => app.close());
+
+  test('login limit is per IP, not per (free) guest session', async () => {
+    await member(app, 'target', 'password123');
+    const headers = { 'x-forwarded-for': '7.7.7.7' };
+    let statuses = [];
+    for (let s = 0; s < 3; s++) {
+      const c = client(app);
+      await c.post('/api/auth/guest', { ageOk: true }, headers);
+      for (let i = 0; i < 4; i++) statuses.push((await c.post('/api/auth/login', { username: 'target', password: 'wrong-guess' }, headers)).status);
+    }
+    assert.equal(statuses.filter((s) => s === 401).length, 10);
+    assert.equal(statuses.at(-1), 429);
+  });
+
+  test('per-account throttle stops distributed guessing', async () => {
+    await member(app, 'victim', 'password123');
+    let last;
+    for (let i = 0; i < 21; i++) last = await client(app).post('/api/auth/login', { username: 'victim', password: 'wrong-guess' });
+    assert.equal(last.status, 429);
+  });
+
+  test('sliding session re-sends the cookie', async () => {
+    const c = await guest(app);
+    app.db.prepare('UPDATE sessions SET expires_at = ?').run(Date.now() + 86_400_000);
+    const r = await c.get('/api/me');
+    const set = r.res.cookies.find((k) => k.name === 'tt_sid');
+    assert.ok(set, 'Set-Cookie present');
+    assert.ok(set.maxAge > 170 * 86400);
+    assert.equal((await c.get('/api/me')).res.cookies.length, 0, 'not re-sent on every request');
+  });
+
+  test('admin comes from the database flag, not the username', async () => {
+    const m = await member(app, 'mod_tyler');
+    assert.equal((await m.get('/api/me')).json.user.isAdmin, false);
+    app.db.prepare("UPDATE users SET is_admin = 1 WHERE username = 'mod_tyler'").run();
+    assert.equal((await m.get('/api/me')).json.user.isAdmin, true);
+  });
+
+  test('guests cannot react or report; fresh accounts do not auto-hide', async () => {
+    const author = await member(app, 'author2');
+    const log = (await author.post('/api/logs', { kind: 'burp', tzOffset: 0 })).json;
+    await author.put(`/api/logs/${log.id}/audio`, testClip(), audioHeaders);
+    const postId = (await author.post('/api/posts', { logId: log.id })).json.id;
+    const g = await guest(app);
+    assert.equal((await g.put(`/api/posts/${postId}/reaction`, { emoji: 'laugh' })).status, 403);
+    assert.equal((await g.post(`/api/posts/${postId}/report`, { reason: 'spam' })).status, 403);
+    for (const name of ['sock1', 'sock2', 'sock3']) await (await member(app, name)).post(`/api/posts/${postId}/report`, { reason: 'spam' });
+    assert.ok((await client(app).get('/api/posts')).json.posts.some((p) => p.id === postId), 'new accounts cannot hide posts');
+  });
+
+  test('password recovery from a guest session keeps the guest logs', async () => {
+    const m = await member(app, 'recoverer', 'password123');
+    const g = await guest(app);
+    await g.post('/api/logs', { kind: 'fart', tzOffset: 0 });
+    await g.post('/api/logs', { kind: 'burp', tzOffset: 0 });
+    assert.equal((await g.post('/api/auth/recover', { username: 'recoverer', recoveryCode: m.recoveryCode, password: 'newpassword1' })).status, 200);
+    assert.equal((await g.get(`/api/logs?date=${today()}`)).json.logs.length, 2);
+  });
+
+  test('top feed pages with a stable keyset cursor', async () => {
+    const posters = [await member(app, 'prolific1'), await member(app, 'prolific2')]; // 20 posts/hour/user limit
+    const fans = await Promise.all(['fan1', 'fan2'].map((n) => member(app, n)));
+    const ids = [];
+    for (let i = 0; i < 24; i++) {
+      const poster = posters[i % 2];
+      const log = (await poster.post('/api/logs', { kind: 'fart', tzOffset: 0 })).json;
+      await poster.put(`/api/logs/${log.id}/audio`, testClip(), audioHeaders);
+      ids.push((await poster.post('/api/posts', { logId: log.id })).json.id);
+    }
+    for (const f of fans) await f.put(`/api/posts/${ids[5]}/reaction`, { emoji: 'fire' });
+    const anon = client(app);
+    const p1 = (await anon.get('/api/posts?sort=top')).json;
+    assert.equal(p1.posts[0].id, ids[5]);
+    await fans[0].put(`/api/posts/${ids[5]}/reaction`, { emoji: null }); // score changes between pages
+    const p2 = (await anon.get(`/api/posts?sort=top&cursor=${p1.cursor}&since=${p1.since}`)).json;
+    const all = [...p1.posts, ...p2.posts].map((p) => p.id);
+    assert.equal(new Set(all).size, all.length, 'no duplicates');
+    assert.ok(ids.every((id) => all.includes(id)), 'nothing skipped');
+  });
+});
+
+describe('billing hardening', () => {
+  let app;
+  before(async () => {
+    app = await makeApp({ stripe: { secretKey: 'sk_test_dummy', webhookSecret: 'whsec_test', priceId: 'price_x', mode: 'subscription', priceLabel: '$2.99/mo' } });
+  });
+  after(() => app.close());
+
+  const send = async (event) => {
+    const payload = JSON.stringify(event);
+    const sig = app.stripe.webhooks.generateTestHeaderString({ payload, secret: 'whsec_test' });
+    return app.inject({ method: 'POST', url: '/api/billing/webhook', payload, headers: { 'content-type': 'application/json', 'stripe-signature': sig } });
+  };
+
+  test('subscription premium follows the real billing period; refunds revoke', async () => {
+    const c = await member(app, 'annual');
+    const userId = (await c.get('/api/me')).json.user.id;
+    const yearOut = Math.floor(Date.now() / 1000) + 365 * 86400;
+    app.stripe.subscriptions.retrieve = async () => ({ id: 'sub_1', items: { data: [{ current_period_end: yearOut }] } });
+    await send({ id: 'evt_a', type: 'checkout.session.completed', data: { object: { mode: 'subscription', payment_status: 'paid',
+      client_reference_id: String(userId), customer: 'cus_a', subscription: 'sub_1' } } });
+    const until = app.db.prepare('SELECT premium_until FROM users WHERE id = ?').get(userId).premium_until;
+    assert.ok(until > Date.now() + 360 * 86_400_000, 'annual plan lasts the year');
+    await send({ id: 'evt_b', type: 'charge.refunded', data: { object: { customer: 'cus_a', refunded: true } } });
+    assert.equal((await c.get('/api/me')).json.user.isPremium, false);
+  });
+
+  test('account is kept when the subscription cannot be cancelled', async () => {
+    const c = await member(app, 'subscriber');
+    app.db.prepare("UPDATE users SET stripe_subscription_id = 'sub_x', premium_until = ? WHERE username = 'subscriber'").run(Date.now() + 86_400_000);
+    app.stripe.subscriptions.cancel = async () => { throw Object.assign(new Error('Stripe down'), { code: 'api_error' }); };
+    assert.equal((await c.del('/api/me', { confirm: 'subscriber' })).status, 502);
+    assert.equal((await c.get('/api/me')).json.user.username, 'subscriber');
+    app.stripe.subscriptions.cancel = async () => ({ status: 'canceled' });
+    assert.equal((await c.del('/api/me', { confirm: 'subscriber' })).status, 200);
   });
 });

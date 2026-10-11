@@ -5,8 +5,9 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
+import Stripe from 'stripe';
 import { openDb } from './db.js';
-import { createSessionStore, COOKIE } from './auth.js';
+import { createSessionStore, cookieOptions, COOKIE } from './auth.js';
 import { createAudioService } from './audio.js';
 import authRoutes from './routes/auth.js';
 import logRoutes from './routes/logs.js';
@@ -31,6 +32,7 @@ export async function buildApp(cfg, { logger = true } = {}) {
   app.decorate('db', db);
   app.decorate('sessions', sessions);
   app.decorate('audio', audio);
+  app.decorate('stripe', cfg.billingEnabled ? new Stripe(cfg.stripe.secretKey) : null);
   app.decorateRequest('user', null);
   app.addHook('onClose', async () => db.close());
 
@@ -54,12 +56,13 @@ export async function buildApp(cfg, { logger = true } = {}) {
   });
 
   // Resolve the session first so rate limits can key on the user instead of a shared IP.
-  app.addHook('onRequest', async (req) => {
+  app.addHook('onRequest', async (req, reply) => {
     const row = sessions.resolve(req.cookies[COOKIE]);
     if (row) {
+      if (row.refreshed) reply.setCookie(COOKIE, req.cookies[COOKIE], cookieOptions(cfg));
       req.user = row;
       req.user.isGuest = !row.username;
-      req.user.isAdmin = Boolean(row.username) && cfg.adminUsernames.includes(row.username.toLowerCase());
+      req.user.isAdmin = Boolean(row.username && row.is_admin);
       req.user.isPremium = !cfg.billingEnabled || (row.premium_until ?? 0) > Date.now();
     }
   });

@@ -79,6 +79,9 @@ const MIGRATIONS = [
   );
   CREATE TABLE stripe_events (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
   `,
+  // v2: admin is a database flag granted from the CLI (a configured name could be claimed by anyone).
+  `ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
+   CREATE INDEX users_customer ON users(stripe_customer_id);`,
 ];
 
 export function openDb(cfg) {

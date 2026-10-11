@@ -22,7 +22,7 @@ Needs Node 22+ and ffmpeg (`sudo apt install ffmpeg`).
 cd toottally
 npm ci
 npm run dev        # http://localhost:3000
-npm test           # 26 API tests
+npm test           # 35 API tests
 npm run e2e        # real-browser test with a fake microphone (Chromium)
 ```
 
@@ -54,7 +54,6 @@ DOMAIN=toottally.yourdomain.com
 PUBLIC_URL=https://toottally.yourdomain.com
 APP_NAME=TootTally
 SUPPORT_EMAIL=you@yourdomain.com
-ADMIN_USERNAMES=yourusername
 REPORT_HIDE_THRESHOLD=3
 MOD_WEBHOOK_URL=https://ntfy.sh/pick-a-long-random-topic-name
 STRIPE_SECRET_KEY=
@@ -74,18 +73,22 @@ docker compose up -d --build
 curl -s https://toottally.yourdomain.com/healthz   # → {"ok":true}
 ```
 
-On your phone, open the site and tap **Share → Add to Home Screen**. Then claim the username you put in `ADMIN_USERNAMES`.
+On your phone, open the site and tap **Share → Add to Home Screen**. Claim your username, then make yourself a moderator:
+
+```bash
+docker compose exec app node server/admin.js admin yourusername
+```
 
 To update later: `git pull && docker compose up -d --build`
 
 ## Turn on Premium (Stripe)
 
 1. In the Stripe Dashboard, go to **Product catalog → Add product** ("TootTally Premium") and add a one-time price (e.g. $4.99) or a recurring one. Copy the **price ID** (`price_…`).
-2. Under **Developers → Webhooks → Add endpoint**, use `https://YOUR_DOMAIN/api/billing/webhook` with these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.updated`, `customer.subscription.deleted`. Copy the **signing secret** (`whsec_…`).
+2. Under **Developers → Webhooks → Add endpoint**, use `https://YOUR_DOMAIN/api/billing/webhook` with these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.updated`, `customer.subscription.deleted`, `charge.refunded`, `charge.dispute.created`. Copy the **signing secret** (`whsec_…`).
 3. Put `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET` in `.env` (plus `STRIPE_MODE=subscription` for a recurring price), then run `docker compose up -d`.
 4. For subscriptions, turn on the **Customer portal** in Stripe settings so users can cancel on their own.
 
-Premium unlocks 90-day and 1-year history, trigger insights, the doctor report and a ⭐ supporter badge.
+Premium unlocks 90-day and 1-year history, trigger insights, the doctor report and a ⭐ supporter badge. A full refund or a chargeback removes Premium automatically. Deleting an account cancels its subscription first; if Stripe can't confirm the cancellation, the account isn't deleted.
 
 ## Moderation & operations
 
@@ -95,12 +98,13 @@ docker compose exec app node server/admin.js hide 42            # hide post #42
 docker compose exec app node server/admin.js restore 42         # un-hide + clear reports
 docker compose exec app node server/admin.js ban someuser       # suspend community access
 docker compose exec app node server/admin.js premium someuser   # comp Premium
+docker compose exec app node server/admin.js admin someuser     # grant moderator (unadmin to revoke)
 docker compose exec app node server/admin.js stats              # users, DAU, logs, posts
 docker compose exec app node server/admin.js backup             # backup now
 docker compose logs -f app                                      # live logs
 ```
 
-A post is hidden automatically after `REPORT_HIDE_THRESHOLD` different users report it. Admin usernames also get a **Remove** button in the app.
+A post is hidden automatically after `REPORT_HIDE_THRESHOLD` different users report it. Only claimed accounts older than 24 hours count toward that, so a batch of new sockpuppet accounts can't take a post down. Every report still reaches your phone. Admins also get a **Remove** button in the app.
 
 ## Backups
 

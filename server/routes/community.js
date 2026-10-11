@@ -2,6 +2,8 @@ import { REACTION_IDS, REPORT_REASONS } from '../../public/js/catalog.js';
 import { requireUser, requireAccount, userKey } from '../app.js';
 
 const PAGE = 20;
+const WEEK = 7 * 86_400_000;
+const TRUSTED_AGE = 86_400_000; // only accounts older than a day count toward auto-hiding (stops instant sockpuppets)
 
 export default async function communityRoutes(app) {
   const { db, cfg } = app;
@@ -13,7 +15,8 @@ export default async function communityRoutes(app) {
     FROM posts p JOIN users u ON u.id = p.user_id`;
   const q = {
     feedNew: db.prepare(`${select} WHERE ${visible} AND p.id < @before ORDER BY p.id DESC LIMIT ${PAGE}`),
-    feedTop: db.prepare(`${select} WHERE ${visible} AND p.created_at > @since ORDER BY p.score DESC, p.id DESC LIMIT ${PAGE} OFFSET @offset`),
+    feedTop: db.prepare(`${select} WHERE ${visible} AND p.created_at > @since AND (p.score < @cs OR (p.score = @cs AND p.id < @cid))
+                         ORDER BY p.score DESC, p.id DESC LIMIT ${PAGE}`),
     feedMine: db.prepare(`${select} WHERE p.user_id = @viewer AND p.id < @before ORDER BY p.id DESC LIMIT ${PAGE}`),
     one: db.prepare(`${select} WHERE p.id = @id AND (${visible} OR p.user_id = @viewer)`),
     counts: (ids) => db.prepare(`SELECT post_id, emoji, COUNT(*) AS n FROM reactions WHERE post_id IN (${ids.map(() => '?').join(',')}) GROUP BY post_id, emoji`).all(...ids),
@@ -28,7 +31,8 @@ export default async function communityRoutes(app) {
     rescore: db.prepare('UPDATE posts SET score = (SELECT COUNT(*) FROM reactions WHERE post_id = ?) WHERE id = ?'),
     report: db.prepare('INSERT OR IGNORE INTO reports (post_id, user_id, reason, created_at) VALUES (?, ?, ?, ?)'),
     recount: db.prepare(`UPDATE posts SET report_count = (SELECT COUNT(*) FROM reports WHERE post_id = @id),
-                         hidden = CASE WHEN hidden = 0 AND (SELECT COUNT(*) FROM reports WHERE post_id = @id) >= @threshold THEN 1 ELSE hidden END
+                         hidden = CASE WHEN hidden = 0 AND (SELECT COUNT(*) FROM reports r JOIN users u ON u.id = r.user_id
+                           WHERE r.post_id = @id AND u.created_at < r.created_at - @age) >= @threshold THEN 1 ELSE hidden END
                          WHERE id = @id RETURNING hidden, report_count`),
     userByName: db.prepare('SELECT id, username FROM users WHERE username = ?'),
     block: db.prepare('INSERT OR IGNORE INTO blocks (user_id, blocked_id, created_at) VALUES (?, ?, ?)'),
@@ -57,8 +61,14 @@ export default async function communityRoutes(app) {
     const sort = req.query.sort;
     const before = Number.parseInt(req.query.before, 10) || Number.MAX_SAFE_INTEGER;
     if (sort === 'top') {
-      const offset = Math.min(Number.parseInt(req.query.offset, 10) || 0, 1000);
-      return { posts: serialize(q.feedTop.all(params(req, { since: Date.now() - 7 * 86_400_000, offset }))) };
+      // Keyset cursor "score:id" plus a window pinned by the first page, so paging stays stable.
+      const now = Date.now();
+      const since = Math.min(Math.max(Number(req.query.since) || now - WEEK, now - WEEK - 86_400_000), now);
+      const m = /^(\d+):(\d+)$/.exec(req.query.cursor || '');
+      const [cs, cid] = m ? [Number(m[1]), Number(m[2])] : [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
+      const posts = serialize(q.feedTop.all(params(req, { since, cs, cid })));
+      const last = posts.at(-1);
+      return { posts, since, cursor: last ? `${last.score}:${last.id}` : null };
     }
     if (sort === 'mine') {
       if (!req.user) return { posts: [] };
@@ -68,7 +78,7 @@ export default async function communityRoutes(app) {
   });
 
   app.get('/posts/featured', async (req) => {
-    const rows = q.feedTop.all(params(req, { since: Date.now() - 86_400_000, offset: 0 })).filter((r) => r.score > 0);
+    const rows = q.feedTop.all(params(req, { since: Date.now() - 86_400_000, cs: Number.MAX_SAFE_INTEGER, cid: Number.MAX_SAFE_INTEGER })).filter((r) => r.score > 0);
     return { post: serialize(rows.slice(0, 1))[0] ?? null };
   });
 
@@ -106,7 +116,7 @@ export default async function communityRoutes(app) {
   });
 
   app.put('/posts/:id/reaction', {
-    preHandler: requireUser,
+    preHandler: requireAccount,
     config: { rateLimit: { max: 300, timeWindow: '1 hour', keyGenerator: userKey } },
     schema: { body: { type: 'object', required: ['emoji'], properties: { emoji: { type: ['string', 'null'], maxLength: 10 } } } },
   }, async (req, reply) => {
@@ -124,7 +134,7 @@ export default async function communityRoutes(app) {
   });
 
   app.post('/posts/:id/report', {
-    preHandler: requireUser,
+    preHandler: requireAccount,
     config: { rateLimit: { max: 30, timeWindow: '1 hour', keyGenerator: userKey } },
     schema: { body: { type: 'object', required: ['reason'], properties: { reason: { enum: REPORT_REASONS.map((r) => r.id) } } } },
   }, async (req, reply) => {
@@ -132,7 +142,7 @@ export default async function communityRoutes(app) {
     if (!post) return reply.code(404).send({ error: 'Post not found.' });
     if (post.user_id === req.user.id) return reply.code(400).send({ error: 'You can’t report your own post.' });
     const inserted = q.report.run(post.id, req.user.id, req.body.reason, Date.now()).changes;
-    const state = q.recount.get({ id: post.id, threshold: cfg.reportHideThreshold });
+    const state = q.recount.get({ id: post.id, threshold: cfg.reportHideThreshold, age: TRUSTED_AGE });
     if (inserted) notifyModerators(app, post, req.body.reason, state);
     return { ok: true };
   });

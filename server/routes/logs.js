@@ -55,6 +55,10 @@ export default async function logRoutes(app) {
     update: db.prepare(`UPDATE logs SET kind=@kind, type=@type, occurred_at=@occurredAt, local_date=@date, local_hour=@hour,
                         smell=@smell, discomfort=@discomfort, triggers=@triggers, note=@note WHERE id=@id AND user_id=@userId`),
     setAudio: db.prepare('UPDATE logs SET audio_id = ?, audio_ms = ?, peaks = ? WHERE id = ? AND user_id = ?'),
+    // Compare-and-swap: only replace the clip we started from, and never one that got shared meanwhile.
+    swapAudio: db.prepare(`UPDATE logs SET audio_id = @newId, audio_ms = @ms, peaks = @peaks
+                           WHERE id = @id AND user_id = @userId AND audio_id IS @oldId
+                           AND NOT EXISTS (SELECT 1 FROM posts WHERE log_id = @id)`),
     remove: db.prepare('DELETE FROM logs WHERE id = ? AND user_id = ?'),
     rangeRows: db.prepare(`SELECT kind, type, local_date, local_hour, smell, discomfort, triggers FROM logs
                            WHERE user_id = ? AND local_date BETWEEN ? AND ?`),
@@ -147,8 +151,12 @@ export default async function logRoutes(app) {
         if (err instanceof AudioError) return reply.code(422).send({ error: err.message });
         throw err;
       }
-      const changed = q.setAudio.run(clip.id, clip.durationMs, JSON.stringify(clip.peaks), existing.id, req.user.id).changes;
-      if (!changed) { await audio.remove([clip.id]); return reply.code(404).send({ error: 'Log not found.' }); }
+      const changed = q.swapAudio.run({ newId: clip.id, ms: clip.durationMs, peaks: JSON.stringify(clip.peaks),
+        id: existing.id, userId: req.user.id, oldId: existing.audio_id }).changes;
+      if (!changed) {
+        await audio.remove([clip.id]);
+        return reply.code(409).send({ error: 'This entry changed while uploading. Refresh and try again.' });
+      }
       await audio.remove([existing.audio_id]);
       return serializeLog(q.get.get(existing.id, req.user.id));
     });

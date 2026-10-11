@@ -42,8 +42,8 @@ export async function flushQueue() {
         await api('/logs', { method: 'POST', body: queue[0] });
         sent++;
       } catch (err) {
-        if (!(err instanceof ApiError)) break; // still offline: keep the rest
-        if (err.status === 401) break; // no session yet
+        // Keep the entry when offline, signed out, rate limited or the server is having a moment (e.g. mid-deploy).
+        if (!(err instanceof ApiError) || err.status === 401 || err.status === 429 || err.status >= 500) break;
       }
       queue = queue.slice(1);
       writeQueue(queue);

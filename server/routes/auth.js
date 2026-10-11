@@ -3,9 +3,24 @@ import {
   usernameProblem, passwordProblem,
 } from '../auth.js';
 import { requireUser, requireAccount } from '../app.js';
-import { cancelSubscription } from './billing.js';
+import { cancelSubscription, BillingError } from './billing.js';
 
 const strictLimit = { rateLimit: { max: 10, timeWindow: '15 minutes' } };
+// Keyed by IP, not session: free guest sessions must not each get their own password-guessing budget.
+const ipLimit = (max) => ({ rateLimit: { max, timeWindow: '15 minutes', keyGenerator: (req) => req.ip } });
+
+// Per-account throttle so a botnet spread over many IPs still can't hammer one username.
+function accountThrottle({ max = 20, windowMs = 15 * 60_000 } = {}) {
+  const hits = new Map();
+  return (username) => {
+    const key = String(username).toLowerCase();
+    const now = Date.now();
+    if (hits.size > 50_000) for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
+    const e = hits.get(key);
+    if (!e || e.reset < now) { hits.set(key, { n: 1, reset: now + windowMs }); return true; }
+    return ++e.n <= max;
+  };
+}
 
 export function publicUser(u) {
   if (!u) return null;
@@ -29,6 +44,16 @@ export default async function authRoutes(app) {
   };
 
   const startSession = (reply, userId) => reply.setCookie(COOKIE, sessions.create(userId), cookieOptions(cfg));
+  const throttled = accountThrottle();
+  // Signing in from a guest session: bring that device's logs into the account and drop the guest.
+  const switchTo = (req, reply, userId) => {
+    if (req.user?.isGuest && req.user.id !== userId) {
+      db.transaction(() => { q.moveLogs.run(userId, req.user.id); q.deleteUser.run(req.user.id); })();
+    } else {
+      sessions.destroy(req.cookies[COOKIE]);
+    }
+    startSession(reply, userId);
+  };
 
   app.get('/me', async (req) => ({
     user: publicUser(req.user),
@@ -76,28 +101,24 @@ export default async function authRoutes(app) {
     return { username, recoveryCode };
   });
 
-  app.post('/auth/login', { config: strictLimit, schema: { body: credsSchema } }, async (req, reply) => {
+  app.post('/auth/login', { config: ipLimit(10), schema: { body: credsSchema } }, async (req, reply) => {
+    if (!throttled(req.body.username)) return reply.code(429).send({ error: 'Too many attempts for this account. Try again in 15 minutes.' });
     const user = q.byName.get(req.body.username);
     const ok = await verifySecret(req.body.password, user?.pass_hash);
     if (!ok) return reply.code(401).send({ error: 'Wrong username or password.' });
-    // Bring any guest logs from this device into the account, then drop the guest.
-    if (req.user?.isGuest && req.user.id !== user.id) {
-      db.transaction(() => { q.moveLogs.run(user.id, req.user.id); q.deleteUser.run(req.user.id); })();
-    } else {
-      sessions.destroy(req.cookies[COOKIE]);
-    }
-    startSession(reply, user.id);
+    switchTo(req, reply, user.id);
     return { ok: true };
   });
 
   app.post('/auth/recover', {
-    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+    config: ipLimit(5),
     schema: { body: { type: 'object', required: ['username', 'recoveryCode', 'password'], properties: {
       username: { type: 'string', maxLength: 40 }, recoveryCode: { type: 'string', maxLength: 60 },
       password: { type: 'string', maxLength: 200 } } } },
   }, async (req, reply) => {
     const problem = passwordProblem(req.body.password);
     if (problem) return reply.code(400).send({ error: problem });
+    if (!throttled(req.body.username)) return reply.code(429).send({ error: 'Too many attempts for this account. Try again in 15 minutes.' });
     const user = q.byName.get(req.body.username);
     const ok = await verifySecret(normalizeRecovery(req.body.recoveryCode), user?.recovery_hash);
     if (!ok) return reply.code(401).send({ error: 'That recovery code doesn’t match.' });
@@ -107,7 +128,7 @@ export default async function authRoutes(app) {
       q.setPassAndRecovery.run(passHash, recHash, user.id);
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
     })();
-    startSession(reply, user.id);
+    switchTo(req, reply, user.id);
     return { recoveryCode };
   });
 
@@ -141,7 +162,13 @@ export default async function authRoutes(app) {
       return reply.code(400).send({ error: `Type ${expected} to confirm.` });
     }
     const audioIds = q.userAudio.all(req.user.id).map((r) => r.audio_id);
-    await cancelSubscription(cfg, req.user, req.log);
+    try {
+      await cancelSubscription(app, req.user);
+    } catch (err) {
+      if (!(err instanceof BillingError)) throw err;
+      req.log.error({ err: err.cause }, 'subscription cancel failed; account kept');
+      return reply.code(502).send({ error: 'Couldn’t cancel your subscription right now, so nothing was deleted. Please try again in a minute.' });
+    }
     q.deleteUser.run(req.user.id); // cascades to sessions, logs, posts, reactions, reports, blocks
     await app.audio.remove(audioIds);
     reply.clearCookie(COOKIE, { path: '/' });

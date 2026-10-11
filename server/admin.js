@@ -2,7 +2,8 @@
 //   reports              list reported / auto-hidden posts
 //   hide <postId>        hide a post          restore <postId>   un-hide a post (clears reports)
 //   ban <username>       suspend community access (hides all their posts)   unban <username>
-//   premium <username>   grant lifetime premium (comps, refunds handled in Stripe)
+//   premium <username>   grant lifetime premium (comps)
+//   admin <username>     give in-app moderator powers   unadmin <username>
 //   backup               write a database backup now
 //   stats                quick usage numbers
 import { loadConfig } from './config.js';
@@ -25,6 +26,8 @@ const commands = {
   },
   ban: () => { db.prepare('UPDATE users SET banned = 1 WHERE id = ?').run(user(arg).id); console.log(`Banned ${arg}`); },
   unban: () => { db.prepare('UPDATE users SET banned = 0 WHERE id = ?').run(user(arg).id); console.log(`Unbanned ${arg}`); },
+  admin: () => { db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(user(arg).id); console.log(`${arg} is now an admin`); },
+  unadmin: () => { db.prepare('UPDATE users SET is_admin = 0 WHERE id = ?').run(user(arg).id); console.log(`${arg} is no longer an admin`); },
   premium: () => { db.prepare('UPDATE users SET premium_until = 253402300799000 WHERE id = ?').run(user(arg).id); console.log(`Premium granted to ${arg}`); },
   backup: async () => {
     const file = `${cfg.backupDir}/manual-${Date.now()}.db`;
@@ -40,8 +43,8 @@ const commands = {
       (SELECT COUNT(*) FROM posts) AS posts`).all()),
 };
 
-if (!commands[cmd] || (['hide', 'restore', 'ban', 'unban', 'premium'].includes(cmd) && !arg)) {
-  console.log('Commands: reports | hide <postId> | restore <postId> | ban <user> | unban <user> | premium <user> | backup | stats');
+if (!commands[cmd] || (['hide', 'restore', 'ban', 'unban', 'premium', 'admin', 'unadmin'].includes(cmd) && !arg)) {
+  console.log('Commands: reports | hide <postId> | restore <postId> | ban <user> | unban <user> | premium <user> | admin <user> | unadmin <user> | backup | stats');
   process.exit(cmd ? 1 : 0);
 }
 await commands[cmd]();
