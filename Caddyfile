@@ -1,0 +1,8 @@
+# Automatic HTTPS (Let's Encrypt) for your domain, proxied to the app.
+{$DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 4MB
+	}
+	reverse_proxy app:3000
+}

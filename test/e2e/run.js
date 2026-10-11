@@ -1,0 +1,132 @@
+// End-to-end smoke test in real Chromium with a fake microphone.
+// Usage: npm run e2e   (screenshots land in test/e2e/shots/)
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+import { loadConfig } from '../../server/config.js';
+import { buildApp } from '../../server/app.js';
+
+const shots = new URL('./shots/', import.meta.url).pathname;
+fs.mkdirSync(shots, { recursive: true });
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-e2e-'));
+const app = await buildApp(loadConfig({ dataDir, port: 0 }), { logger: false });
+await app.listen({ port: 0, host: '127.0.0.1' });
+const base = `http://127.0.0.1:${app.server.address().port}`;
+
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium',
+  args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+});
+const errors = [];
+const step = (name) => console.log(`• ${name}`);
+try {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, permissions: ['microphone'] });
+  const page = await ctx.newPage();
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  step('welcome → start as guest');
+  await page.goto(base);
+  await page.getByText('The fun, science-backed gas tracker.').waitFor();
+  await page.screenshot({ path: `${shots}01-welcome.png` });
+  assert.equal(await page.getByRole('button', { name: /Start tracking/ }).isDisabled(), true, 'age gate');
+  await page.locator('#age').check();
+  await page.getByRole('button', { name: /Start tracking/ }).click();
+  await page.getByRole('heading', { name: 'Today' }).waitFor();
+
+  step('log a fart with type, smell, trigger and a recording');
+  await page.getByRole('button', { name: 'Log a fart' }).click();
+  await page.locator('#type').selectOption('thunder');
+  await page.getByText('Loud, explosive, turns heads.').waitFor();
+  await page.getByRole('button', { name: /Strong/ }).click();
+  await page.getByText('Possible triggers').click();
+  await page.getByRole('button', { name: /Beans & lentils/ }).click();
+  await page.getByRole('button', { name: /Record it/ }).click();
+  await page.locator('.rec-dot').waitFor();
+  await page.waitForTimeout(2200);
+  await page.screenshot({ path: `${shots}02-recording.png` });
+  await page.getByRole('button', { name: '■ Stop' }).click();
+  await page.getByRole('button', { name: /Re-record/ }).waitFor();
+  assert.equal(await page.getByRole('switch').isDisabled(), true, 'guests cannot share');
+  await page.screenshot({ path: `${shots}03-log-sheet.png`, fullPage: false });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Thunderclap logged!').waitFor();
+  await page.locator('.entry', { hasText: 'Thunderclap' }).waitFor();
+
+  step('quick +1 burp and pick a burp type');
+  await page.getByRole('button', { name: 'Quick add one burp' }).click();
+  await page.getByText('+1 burp').waitFor();
+  await page.getByRole('button', { name: 'Log a burp' }).click();
+  await page.locator('#type').selectOption('sulfur');
+  await page.getByText(/Frequent sulfur burps/).waitFor();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Rotten Egg logged!').waitFor();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${shots}04-today.png`, fullPage: true });
+  assert.equal(await page.locator('.counter.fart .num b').textContent(), '1');
+  assert.equal(await page.locator('.counter.burp .num b').textContent(), '2');
+
+  step('claim username → recovery code');
+  await page.getByRole('link', { name: /Me/ }).click();
+  await page.locator('input[name=username]').fill('thunder_buns');
+  await page.locator('input[name=password]').fill('supersecret1');
+  await page.getByRole('button', { name: 'Claim username' }).click();
+  await page.locator('.code-box').waitFor();
+  await page.screenshot({ path: `${shots}05-recovery.png` });
+  await page.getByRole('button', { name: 'I saved it' }).click();
+  await page.getByRole('heading', { name: '@thunder_buns' }).waitFor();
+
+  step('share the recorded clip to the community');
+  await page.getByRole('link', { name: /Today/ }).click();
+  await page.locator('.entry', { hasText: 'Thunderclap' }).click();
+  await page.getByRole('switch').check();
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.getByText('Updated').waitFor();
+
+  step('community feed: play + react');
+  await page.getByRole('link', { name: /Community/ }).click();
+  const post = page.locator('article.post', { hasText: '@thunder_buns' }).first();
+  await post.waitFor();
+  await post.getByRole('button', { name: 'Play clip' }).click();
+  await page.waitForTimeout(600);
+  await post.getByRole('button', { name: 'React 😂' }).click();
+  await post.locator('.react[aria-pressed="true"]').waitFor();
+  await page.screenshot({ path: `${shots}06-community.png`, fullPage: true });
+
+  step('insights');
+  await page.getByRole('link', { name: /Insights/ }).click();
+  await page.getByRole('heading', { name: 'Per day' }).waitFor();
+  await page.screenshot({ path: `${shots}07-insights.png`, fullPage: true });
+
+  step('dark mode + public share link');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.getByRole('link', { name: /Today/ }).click();
+  await page.getByRole('heading', { name: 'Today' }).waitFor();
+  await page.screenshot({ path: `${shots}08-today-dark.png`, fullPage: true });
+  const postId = (await (await page.request.get(`${base}/api/posts`)).json()).posts[0].id;
+  const anon = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage();
+  anon.on('pageerror', (e) => errors.push(e.message));
+  await anon.goto(`${base}/p/${postId}`);
+  await anon.getByText('Track yours too').waitFor();
+  await anon.screenshot({ path: `${shots}09-shared-link.png` });
+
+  step('doctor report');
+  const report = await ctx.newPage();
+  await report.goto(`${base}/report`);
+  await report.getByText('Gas & bloating summary').waitFor();
+  await report.screenshot({ path: `${shots}10-report.png`, fullPage: true });
+
+  const csp = errors.filter((e) => /Content Security Policy|Refused/.test(e));
+  assert.deepEqual(csp, [], 'no CSP violations');
+  assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), [], 'no console errors');
+  console.log('E2E PASSED');
+} catch (err) {
+  console.error('E2E FAILED:', err.message, '\nconsole errors:', errors);
+  process.exitCode = 1;
+} finally {
+  await browser.close();
+  await app.close();
+  fs.rmSync(dataDir, { recursive: true, force: true });
+}
