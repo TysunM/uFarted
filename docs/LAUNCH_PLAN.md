@@ -31,7 +31,7 @@ Apple's Guideline **4.3(b)** names fart and burp apps as low-value. The PWA avoi
 
 | Option | Verdict |
 |---|---|
-| **Free, no ads** (now) | Best for growth and trust. Costs about $12/yr for a domain on the server you already pay for. |
+| **Free, no ads** (now) | Best for growth and trust. Total cost is about $10/yr for a domain: hosting runs on your laptop through a free Cloudflare Tunnel. Move to a ~$5/month server only once uptime matters. |
 | **Display ads** (later) | Expect low CPMs, and ad networks restrict health-related targeting. Only worth it past roughly 10k monthly users. Keep ads away from the gut check and the doctor report. The README has the checklist (privacy policy, consent banner, CSP). |
 | **Affiliate links** (better than ads) | Contextual links on a trigger, e.g. lactase pills next to dairy or simethicone next to gas, need an FTC disclosure. They pay per sale, so they beat display ads at small scale. |
 | **Merch** | "Certified Thunderclap Survivor" via print-on-demand (Printful): no inventory, and it fits the humor. |
@@ -55,11 +55,11 @@ Apple's Guideline **4.3(b)** names fart and burp apps as low-value. The PWA avoi
 ## 7. Launch checklist
 
 - [ ] **Name check before buying the domain.** Search [tmsearch.uspto.gov](https://tmsearch.uspto.gov) for UFARTED. No app uses the name today, and it's clearly distinct from InfoMedia's *iFart*. "Fart Tracker" is the search keyword in the title, not the brand: it's too descriptive to own. To rename, set `APP_NAME` and re-run `node scripts/make-icons.js`.
-- [ ] Domain + DNS, then `docker compose up -d --build`
+- [ ] Domain on Cloudflare + tunnel token, then `docker compose up -d --build` (README → Go live for $0).
 - [ ] `SUPPORT_EMAIL` set. The privacy policy and app stores require one.
 - [ ] `MOD_WEBHOOK_URL` set (ntfy), so you see reports within minutes.
 - [ ] Claim your username, run `admin.js admin <you>`, and seed 5–10 community clips.
-- [ ] Off-site backup cron (README → Backups).
+- [ ] Weekly backup to your D: drive (README → Backups).
 
 ## Sources
 

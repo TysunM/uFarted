@@ -10,7 +10,7 @@ The free fart tracker for your gut health. Check in on bloating and belly pain, 
 - **Insights**: bloating and pain trends, gas per day, personal baseline, peak hour, top types, badges, streaks and a share card.
 - **Health**: ranges from 2026 research, red-flag guidance, a printable 90-day doctor report and CSV export.
 - **Free**: no payments, no ads (yet), no email collected.
-- **Ops**: one Docker container plus Caddy for automatic HTTPS, SQLite with daily rotated backups, a moderation CLI and phone alerts on reports.
+- **Ops**: one Docker container with free HTTPS through Cloudflare Tunnel (or Caddy on a server), SQLite with daily rotated backups, a moderation CLI and phone alerts on reports.
 
 It's an installable PWA (Add to Home Screen), so you don't need the App Store to launch.
 
@@ -29,87 +29,90 @@ npm test           # 32 API tests
 npm run e2e        # real-browser test with a fake microphone (Chromium)
 ```
 
-## Deploy to your Hetzner server
+## Go live for $0 on your laptop (Cloudflare Tunnel)
 
-**1. DNS.** Create an `A` record for your domain (e.g. `ufarted.yourdomain.com`) that points at the server's IP.
+Cloudflare Tunnel gives the app real HTTPS on your domain without opening router ports or paying for a server. It keeps working when you change Wi-Fi or move house. The only cost is a domain, about $10/yr.
 
-**2. Server prep.** Skip anything that's already installed:
+**1. Domain.** Buy one at Cloudflare Registrar (sold at cost), or add a domain you already own to a free Cloudflare account.
 
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo ufw allow 80,443/tcp && sudo ufw allow 443/udp
-```
+**2. Create the tunnel.** In the Cloudflare dashboard, go to **Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared**, name it `ufarted`, pick **Docker**, and copy the long token from the command it shows. Under **Public hostname**, choose your domain, set the type to `HTTP`, and the URL to `app:3000`. (Menu names shift a little between dashboard versions.)
 
-> If another proxy on this box already uses ports 80/443, leave out the `caddy` service and point your existing proxy at the app container on port 3000.
-
-**3. Get the code**
+**3. Laptop.** Install **Docker Desktop for Windows** (WSL2 backend) and turn on **Settings → General → Start Docker Desktop when you sign in**. Then, in your WSL terminal, edit the values and paste:
 
 ```bash
 git clone https://github.com/TysunM/ufarted.git
 cd ufarted
-```
-
-**4. Configure.** Edit the values below, then paste the block:
-
-```bash
 cat > .env <<'ENVEOF'
-DOMAIN=ufarted.yourdomain.com
-PUBLIC_URL=https://ufarted.yourdomain.com
+COMPOSE_PROFILES=tunnel
+TUNNEL_TOKEN=paste-your-tunnel-token-here
+DOMAIN=ufarted.com
+PUBLIC_URL=https://ufarted.com
 APP_NAME=uFarted
 SUPPORT_EMAIL=you@yourdomain.com
 REPORT_HIDE_THRESHOLD=3
 MOD_WEBHOOK_URL=https://ntfy.sh/pick-a-long-random-topic-name
 ENVEOF
-```
-
-For `MOD_WEBHOOK_URL`, install the free **ntfy** app on your phone and subscribe to the same topic. You'll get a push on every report. A Discord webhook URL also works.
-
-**5. Launch**
-
-```bash
 docker compose up -d --build
-curl -s https://ufarted.yourdomain.com/healthz   # → {"ok":true}
 ```
 
-On your phone, open the site and tap **Share → Add to Home Screen**. Claim your username, then make yourself a moderator:
+For `MOD_WEBHOOK_URL`, install the free **ntfy** app on your phone and subscribe to the same topic. You'll get a push on every report.
+
+**4. Check it.** On your phone, open your domain and tap **Share → Add to Home Screen**. Claim your username, then make yourself a moderator:
 
 ```bash
 docker compose exec app node server/admin.js admin yourusername
 ```
 
+**5. Keep it online.** In Windows, go to **Settings → System → Power** and set sleep to **Never** when plugged in. The containers restart on their own whenever Docker Desktop starts.
+
+The site is down whenever the laptop is asleep, off or offline. That's fine for a beta and your first users. Move to a server (below) once uptime matters.
+
 To update later: `git pull && docker compose up -d --build`
 
-## Moderation & operations
+### Try it tonight, no domain needed
+
+This gives you a temporary public link to share with friends. You need Node 22+ and ffmpeg in WSL (`sudo apt install ffmpeg`).
 
 ```bash
-docker compose exec app node server/admin.js reports            # reported / auto-hidden posts
-docker compose exec app node server/admin.js hide 42            # hide post #42
-docker compose exec app node server/admin.js restore 42         # un-hide + clear reports
-docker compose exec app node server/admin.js ban someuser       # suspend community access
-docker compose exec app node server/admin.js admin someuser     # grant moderator (unadmin to revoke)
-docker compose exec app node server/admin.js stats              # users, DAU, logs, posts
-docker compose exec app node server/admin.js backup             # backup now
-docker compose logs -f app                                      # live logs
+# Terminal 1: start a temporary tunnel and copy the https://….trycloudflare.com address it prints
+curl -L -o ~/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x ~/cloudflared
+~/cloudflared tunnel --url http://localhost:3000
+
+# Terminal 2: run the app with that address
+cd ufarted && npm ci
+PUBLIC_URL=https://PASTE-THE-ADDRESS.trycloudflare.com npm run dev
 ```
 
-A post is hidden automatically after `REPORT_HIDE_THRESHOLD` different users report it. Only claimed accounts older than 24 hours count toward that, so a batch of new sockpuppet accounts can't take a post down. Every report still reaches your phone. Admins also get a **Remove** button in the app.
+The address changes every time you restart the tunnel, and the data stays in `./data`. Use this for testing only.
+
+## Later: move to a server
+
+Any Linux server with Docker works. Keep `COMPOSE_PROFILES=tunnel` and the same token, and nothing else changes: no ports to open, no DNS edits. (Use `COMPOSE_PROFILES=caddy` instead only if you'd rather point DNS straight at the server's IP.)
+
+Move your data across like this:
+
+```bash
+# On the laptop: stop the app and the tunnel (two copies on one tunnel would split users), then pack the data
+docker compose stop
+docker run --rm -v ufarted_ufarted-data:/data -v "$PWD":/out alpine tar czf /out/ufarted-data.tgz -C /data .
+
+# On the server, after cloning the repo and creating the same .env, copy ufarted-data.tgz into the repo folder, then:
+docker volume create ufarted_ufarted-data
+docker run --rm -v ufarted_ufarted-data:/data -v "$PWD":/in alpine tar xzf /in/ufarted-data.tgz -C /data
+docker compose up -d --build
+```
 
 ## Backups
 
-Every 24 h the app writes a consistent SQLite backup to the data volume and keeps the last 7. Copy them **off the server** too, for example nightly to a Hetzner Storage Box:
+Every 24 h the app writes a consistent SQLite backup inside its data volume and keeps the last 7. That's the same disk as the live data, so also copy everything to another drive. For example, to your D: drive (an external or long-term storage drive):
 
 ```bash
-cat > /usr/local/bin/ufarted-offsite.sh <<'SHEOF'
-#!/bin/sh
-set -e
-VOL=$(docker volume inspect -f '{{.Mountpoint}}' ufarted_ufarted-data)
-rsync -a --delete -e "ssh -p 23" "$VOL/" uXXXXXX@uXXXXXX.your-storagebox.de:ufarted/
-SHEOF
-chmod +x /usr/local/bin/ufarted-offsite.sh
-( crontab -l 2>/dev/null; echo "30 3 * * * /usr/local/bin/ufarted-offsite.sh" ) | crontab -
+mkdir -p /mnt/d/ufarted-backups
+docker run --rm -v ufarted_ufarted-data:/data:ro -v /mnt/d/ufarted-backups:/out alpine sh -c 'tar czf /out/ufarted-$(date +%F).tgz -C /data .'
 ```
 
-To restore, stop the app, copy a `backups/ufarted-YYYY-MM-DD.db` over `ufarted.db` in the volume, and start the app again.
+Run it weekly (or set it up in Windows Task Scheduler). To restore, stop the app, copy a `backups/ufarted-YYYY-MM-DD.db` over `ufarted.db` in the volume, and start the app again.
 
 ## Adding ads later
 

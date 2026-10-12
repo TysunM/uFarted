@@ -1,3 +1,6 @@
+# Pick how the app reaches the internet with COMPOSE_PROFILES in .env:
+#   tunnel — Cloudflare Tunnel: free HTTPS, no open ports. Runs anywhere, including your laptop.
+#   caddy  — Caddy on ports 80/443 with automatic Let's Encrypt. For a server with a public IP.
 services:
   app:
     build: .
@@ -19,13 +22,26 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "5" }
 
+  tunnel:
+    image: cloudflare/cloudflared:2026.9.2
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on: [app]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   caddy:
     image: caddy:2-alpine
+    profiles: ["caddy"]
     restart: unless-stopped
     depends_on: [app]
     ports: ["80:80", "443:443", "443:443/udp"]
     environment:
-      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      DOMAIN: ${DOMAIN:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
