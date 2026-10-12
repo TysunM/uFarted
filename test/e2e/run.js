@@ -69,8 +69,19 @@ try {
 
   step('log a fart with type, smell, trigger and a recording');
   await page.getByRole('button', { name: 'Log a fart' }).click();
-  await page.locator('#type').selectOption('thunder');
+  await page.locator('#type').click();
+  const picker = page.getByRole('dialog', { name: 'Pick the type' });
+  await picker.waitFor();
+  const thunderSound = page.waitForResponse((r) => r.url().endsWith('/sounds/fart-thunder.mp3'));
+  await picker.getByRole('button', { name: 'Hear Thunderclap' }).click();
+  assert.ok([200, 206].includes((await thunderSound).status()), 'sample served');
+  await picker.locator('.play.playing').waitFor({ timeout: 3000 });
+  await page.screenshot({ path: `${shots}02b-type-picker.png` });
+  await picker.locator('.type-pick', { hasText: 'Thunderclap' }).click();
+  await picker.waitFor({ state: 'detached' });
   await page.getByText('Loud, explosive, turns heads.').waitFor();
+  await page.getByRole('button', { name: 'Hear this type' }).click();
+  await page.locator('.type-choice .play.playing').waitFor({ timeout: 3000 });
   await page.getByRole('button', { name: /Strong/ }).click();
   await page.getByText('Possible triggers').click();
   await page.getByRole('button', { name: /Beans & lentils/ }).click();
@@ -90,7 +101,8 @@ try {
   await page.getByRole('button', { name: 'Quick add one burp' }).click();
   await page.getByText('+1 burp').waitFor();
   await page.getByRole('button', { name: 'Log a burp' }).click();
-  await page.locator('#type').selectOption('sulfur');
+  await page.locator('#type').click();
+  await page.getByRole('dialog', { name: 'Pick the type' }).locator('.type-pick', { hasText: 'Rotten Egg' }).click();
   await page.getByText(/Frequent sulfur burps/).waitFor();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('Rotten Egg logged!').waitFor();
@@ -138,6 +150,16 @@ try {
   await post.getByRole('button', { name: 'React 😂' }).click();
   await post.locator('.react[aria-pressed="true"]').waitFor();
   await page.screenshot({ path: `${shots}06-community.png`, fullPage: true });
+
+  step('soundboard: hear any type without logging');
+  await page.getByRole('button', { name: '🔊 Soundboard' }).click();
+  const board = page.getByRole('dialog', { name: 'Soundboard' });
+  await board.getByRole('button', { name: '🫧 Burps' }).click();
+  const belch = page.waitForResponse((r) => r.url().endsWith('/sounds/burp-belch.mp3'));
+  await board.locator('.type-pick', { hasText: 'Big Belch' }).click();
+  await belch;
+  await page.keyboard.press('Escape');
+  await board.waitFor({ state: 'detached' });
 
   step('insights');
   await page.getByRole('link', { name: /Insights/ }).click();

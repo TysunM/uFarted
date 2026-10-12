@@ -4,6 +4,7 @@ import { el, fmtDur } from './ui.js';
 const audio = new Audio();
 audio.preload = 'none';
 let active = null;
+let activeSrc = '';
 
 audio.addEventListener('timeupdate', () => active?.progress(audio.currentTime / (audio.duration || 1)));
 audio.addEventListener('ended', () => { active?.reset(); active = null; });
@@ -25,20 +26,35 @@ export function player({ src, peaks, durationMs }) {
     setPlaying(on) { btn.textContent = on ? '❚❚' : '▶'; btn.setAttribute('aria-label', on ? 'Pause clip' : 'Play clip'); },
     reset() { self.setPlaying(false); self.progress(0); },
   };
-  btn.addEventListener('click', async () => {
-    if (active === self && !audio.paused) return audio.pause();
-    if (active !== self) {
-      active?.reset();
-      active = self;
-      audio.src = src;
-    }
-    try {
-      await audio.play();
-    } catch {
-      self.reset();
-    }
-  });
+  btn.addEventListener('click', () => toggle(self, src));
   return node;
 }
 
-export const stopPlayback = () => { audio.pause(); active?.reset(); active = null; };
+async function toggle(self, src) {
+  if (active === self && activeSrc === src && !audio.paused) return audio.pause();
+  if (active !== self || activeSrc !== src) {
+    active?.reset();
+    active = self;
+    activeSrc = src;
+    audio.src = src;
+  }
+  try {
+    await audio.play();
+  } catch {
+    self.reset();
+  }
+}
+
+/** Compact round play button for short clips. `src` may be a function so it can follow a changing selection. */
+export function playButton(src, { label = 'Play', icon = '▶', className = '' } = {}) {
+  const btn = el('button', { type: 'button', class: `play sm ${className}`, 'aria-label': label, title: label }, icon);
+  const self = {
+    progress() {},
+    setPlaying(on) { btn.textContent = on ? '❚❚' : icon; btn.classList.toggle('playing', on); },
+    reset() { self.setPlaying(false); },
+  };
+  btn.addEventListener('click', (e) => { e.stopPropagation(); toggle(self, typeof src === 'function' ? src() : src); });
+  return btn;
+}
+
+export const stopPlayback = () => { audio.pause(); active?.reset(); active = null; activeSrc = ''; };

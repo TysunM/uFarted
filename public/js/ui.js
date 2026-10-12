@@ -47,12 +47,12 @@ export function sheet(title, build, { label } = {}) {
     const close = (result) => {
       backdrop.remove();
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      if (!document.querySelector('.backdrop')) document.body.style.overflow = '';
       prevFocus?.focus?.();
       resolve(result);
     };
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
-    const box = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': label || title },
+    const onKey = (e) => { if (e.key === 'Escape' && [...document.querySelectorAll('.backdrop')].pop() === backdrop) close(); };
+    const box = el('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': label || title, tabindex: '-1' },
       el('div', { class: 'grabber' }),
       el('div', { class: 'sheet-head' }, el('h2', {}, title), el('button', { class: 'btn icon ghost', 'aria-label': 'Close', onclick: () => close() }, '✕')),
       build(close));
@@ -60,7 +60,8 @@ export function sheet(title, build, { label } = {}) {
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     document.body.append(backdrop);
-    box.querySelector('input, select, textarea, button.primary')?.focus({ preventScroll: true });
+    // Focus the dialog itself (not the first field) so phones don't pop up a keyboard or date picker.
+    (box.querySelector('[autofocus]') || box).focus({ preventScroll: true });
   });
 }
 

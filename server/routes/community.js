@@ -3,6 +3,7 @@ import { requireUser, requireAccount, userKey } from '../app.js';
 
 const PAGE = 20;
 const WEEK = 7 * 86_400_000;
+const CHAMPION_MIN_SCORE = 3; // reactions a clip needs before it becomes the reference sound for its type
 const TRUSTED_AGE = 86_400_000; // only accounts older than a day count toward auto-hiding (stops instant sockpuppets)
 
 export default async function communityRoutes(app) {
@@ -38,6 +39,10 @@ export default async function communityRoutes(app) {
     block: db.prepare('INSERT OR IGNORE INTO blocks (user_id, blocked_id, created_at) VALUES (?, ?, ?)'),
     unblock: db.prepare('DELETE FROM blocks WHERE user_id = ? AND blocked_id = ?'),
     blocks: db.prepare('SELECT u.username FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.user_id = ? ORDER BY u.username'),
+    champions: db.prepare(`SELECT kind, type, audio_id, username, score FROM (
+        SELECT p.kind, p.type, p.audio_id, u.username, p.score,
+               ROW_NUMBER() OVER (PARTITION BY p.kind, p.type ORDER BY p.score DESC, p.id DESC) AS rn
+        FROM posts p JOIN users u ON u.id = p.user_id WHERE ${visible} AND p.score >= @min) WHERE rn = 1`),
     audioOwner: db.prepare('SELECT user_id FROM logs WHERE audio_id = ?'),
     audioPublic: db.prepare(`SELECT 1 FROM posts p JOIN users u ON u.id = p.user_id WHERE p.audio_id = ? AND p.hidden = 0 AND u.banned = 0`),
   };
@@ -54,7 +59,7 @@ export default async function communityRoutes(app) {
       score: r.score, hidden: Boolean(r.hidden),
     }));
   }
-  const params = (req, extra = {}) => ({ viewer: req.user?.id ?? 0, now: Date.now(), ...extra });
+  const params = (req, extra = {}) => ({ viewer: req.user?.id ?? 0, ...extra });
 
   // Feed is public (read-only) so shared links work for people who haven't joined yet.
   app.get('/posts', async (req) => {
@@ -75,6 +80,15 @@ export default async function communityRoutes(app) {
       return { posts: serialize(q.feedMine.all(params(req, { before }))) };
     }
     return { posts: serialize(q.feedNew.all(params(req, { before }))) };
+  });
+
+  // The community's top-rated real clip for each type, played next to the studio samples in the type picker.
+  app.get('/posts/champions', async (req) => {
+    const champions = {};
+    for (const r of q.champions.all(params(req, { min: CHAMPION_MIN_SCORE }))) {
+      champions[`${r.kind}:${r.type}`] = { audioId: r.audio_id, username: r.username, score: r.score };
+    }
+    return { champions };
   });
 
   app.get('/posts/featured', async (req) => {

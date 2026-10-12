@@ -1,8 +1,9 @@
-import { KINDS, TRIGGERS, SMELL, DISCOMFORT, typeInfo } from './catalog.js';
+import { KINDS, TRIGGERS, SMELL, DISCOMFORT, typeInfo, isValidType } from './catalog.js';
 import { el, sheet, toast, confirmSheet, segmented, pad } from './ui.js';
 import { api, createLog, ApiError } from './api.js';
 import { recorderWidget, canRecord } from './recorder.js';
-import { player, stopPlayback } from './player.js';
+import { player, playButton, stopPlayback } from './player.js';
+import { pickType, sampleSrc } from './typepicker.js';
 import { state } from './state.js';
 
 const toLocalInput = (ms) => {
@@ -30,23 +31,30 @@ export function openLogSheet({ kind = 'fart', log = null } = {}) {
   let createdId = log?.id ?? null; // after a partial failure, retries update instead of duplicating
 
   return sheet(editing ? 'Edit entry' : 'Log it', (close) => {
-    const typeSelect = el('select', { class: 'input', id: 'type' });
+    // Type: current choice + ▶ preview, and a picker where every type can be heard before choosing.
+    const typeEmoji = el('span', { class: 'e', 'aria-hidden': 'true' });
+    const typeName = el('span', { class: 'grow' });
+    const typeButton = el('button', { type: 'button', class: 'type-current', id: 'type', 'aria-label': 'Change type' },
+      typeEmoji, typeName, el('span', { class: 'small muted' }, 'Change ▾'));
+    typeButton.addEventListener('click', async () => {
+      const picked = await pickType({ kind: draft.kind, current: draft.type });
+      if (picked) { draft.type = picked; describe(); }
+    });
+    const hear = playButton(() => sampleSrc(draft.kind, draft.type), { label: 'Hear this type' });
     const typeDesc = el('p', { class: 'type-desc' });
     const healthNote = el('p', { class: 'health-note hidden' });
     const fillTypes = () => {
-      typeSelect.replaceChildren(...KINDS[draft.kind].groups.map((g) => el('optgroup', { label: g.label },
-        g.types.map((t) => el('option', { value: t.id }, `${t.emoji}  ${t.name}`)))));
-      if (!typeInfo(draft.kind, draft.type) || ![...typeSelect.options].some((o) => o.value === draft.type)) draft.type = 'classic';
-      typeSelect.value = draft.type;
+      if (!isValidType(draft.kind, draft.type)) draft.type = 'classic';
       describe();
     };
     const describe = () => {
       const t = typeInfo(draft.kind, draft.type);
+      typeEmoji.textContent = t.emoji;
+      typeName.textContent = t.name;
       typeDesc.textContent = t.desc;
       healthNote.textContent = t.health ? `🩺 ${t.health}` : '';
       healthNote.classList.toggle('hidden', !t.health);
     };
-    typeSelect.addEventListener('change', () => { draft.type = typeSelect.value; describe(); });
 
     const kindSeg = segmented(Object.values(KINDS).map((k) => ({ id: k.id, label: `${k.emoji} ${k.name}` })), draft.kind,
       (id) => { draft.kind = id; fillTypes(); }, 'Fart or burp');
@@ -177,7 +185,7 @@ export function openLogSheet({ kind = 'fart', log = null } = {}) {
     fillTypes();
     const node = el('div', { class: 'stack' },
       kindSeg,
-      el('label', { class: 'field', for: 'type' }, 'What kind?', typeSelect),
+      el('div', { class: 'field stack tight' }, el('strong', {}, 'What kind?'), el('div', { class: 'type-choice' }, hear, typeButton)),
       typeDesc, healthNote,
       el('label', { class: 'field', for: 'when' }, 'When', when),
       el('div', { class: 'field stack tight' }, el('strong', {}, 'Smell'), smell),

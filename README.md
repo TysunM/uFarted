@@ -5,6 +5,7 @@ The free fart tracker for your gut health. Check in on bloating and belly pain, 
 - **Daily gut check**: bloating and belly pain in 2 taps, right at the top of Today.
 - **Triggers**: tag foods and habits (beans, dairy, fizzy drinks…). Insights compares your bloating on days with each trigger against days without it.
 - **Log**: one-tap quick add, or a full entry with type, time, smell, discomfort, triggers and a private note.
+- **Hear every type**: all 39 types have their own sound, playable from the type picker and the 🔊 Soundboard. Each type also plays the community's top-rated real clip (🏆) once one has 3+ reactions.
 - **Record**: clips up to 15 s. The server re-encodes them to AAC with loudness levelling, so they play on every phone, including iPhone.
 - **Community**: public feed, reactions, "Fart of the Day", share links with previews, report / block / auto-hide.
 - **Insights**: bloating and pain trends, gas per day, personal baseline, peak hour, top types, badges, streaks and a share card.
@@ -27,6 +28,7 @@ npm ci
 npm run dev        # http://localhost:3000
 npm test           # 32 API tests
 npm run e2e        # real-browser test with a fake microphone (Chromium)
+npm run sounds     # re-synthesize the 39 type sounds into public/sounds (after editing scripts/synth.js)
 ```
 
 ## Go live for $0 on your laptop (Cloudflare Tunnel)

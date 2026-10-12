@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -50,15 +51,15 @@ export function createAudioService(cfg) {
   async function processClip(buffer) {
     const tmp = path.join(os.tmpdir(), `ufarted-${crypto.randomUUID()}`);
     const id = crypto.randomUUID();
-    const out = path.join(cfg.audioDir, `${id}.m4a`);
+    const out = path.join(cfg.audioDir, `${id}.mp3`);
     await fs.writeFile(tmp, buffer);
     try {
       // Re-encode everything: validates it's real audio, strips metadata, trims, evens out loudness,
-      // and yields AAC/M4A, which plays on every browser including iOS Safari.
+      // and yields MP3, the one format every browser plays (AAC is missing from some Linux builds).
       await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', ...SAFE_INPUT, '-i', tmp,
         '-map', '0:a:0', '-t', String(cfg.maxClipSeconds), '-vn', '-sn', '-dn', '-map_metadata', '-1',
         '-ac', '1', '-ar', '44100', '-af', 'loudnorm=I=-18:TP=-2:LRA=11',
-        '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', '-f', 'mp4', out]);
+        '-c:a', 'libmp3lame', '-b:a', '64k', '-f', 'mp3', out]);
       const pcm = await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-nostdin', ...SAFE_INPUT, '-i', out,
         '-ac', '1', '-ar', '8000', '-f', 's16le', 'pipe:1']);
       const samples = Math.floor(pcm.length / 2);
@@ -76,8 +77,9 @@ export function createAudioService(cfg) {
 
   return {
     process: (buffer) => limit(() => processClip(buffer)),
-    file: (id) => `${id}.m4a`,
-    remove: (ids) => Promise.all(ids.filter(Boolean).map((id) => fs.rm(path.join(cfg.audioDir, `${id}.m4a`), { force: true }))),
+    // Clips recorded before the MP3 switch are still .m4a.
+    file: (id) => (existsSync(path.join(cfg.audioDir, `${id}.mp3`)) ? `${id}.mp3` : `${id}.m4a`),
+    remove: (ids) => Promise.all(ids.filter(Boolean).flatMap((id) => ['mp3', 'm4a'].map((ext) => fs.rm(path.join(cfg.audioDir, `${id}.${ext}`), { force: true })))),
   };
 }
 

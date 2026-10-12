@@ -12,7 +12,8 @@
     "dev": "NODE_ENV=development node --watch server/index.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
     "e2e": "node test/e2e/run.js",
-    "admin": "node server/admin.js"
+    "admin": "node server/admin.js",
+    "sounds": "node scripts/render-sounds.js"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

@@ -3,6 +3,7 @@ import { el, sheet, toast, confirmSheet, segmented, avatar, timeAgo } from '../u
 import { api } from '../api.js';
 import { player } from '../player.js';
 import { state } from '../state.js';
+import { pickType } from '../typepicker.js';
 
 let sort = 'new';
 
@@ -102,7 +103,8 @@ export async function renderCommunity(root, { refresh, focusId }) {
   ]);
 
   root.replaceChildren(el('div', { class: 'page' },
-    el('div', { class: 'page-head' }, el('h1', {}, 'Community')),
+    el('div', { class: 'page-head' }, el('h1', {}, 'Community'),
+      el('button', { class: 'btn sm', onclick: () => pickType({ browse: true }) }, '🔊 Soundboard')),
     !state.me && el('div', { class: 'card brand stack tight' },
       el('h2', {}, 'Track yours too 💨'), el('p', { class: 'small muted' }, 'Free gut-health tracking with a sense of humor: bloating, food triggers, and every toot.'),
       el('a', { class: 'btn white', href: '/' }, 'Start free')),

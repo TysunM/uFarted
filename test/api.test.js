@@ -200,11 +200,11 @@ describe('audio & community', () => {
     assert.equal(ok.status, 200);
     assert.equal(ok.json.peaks.length, 48);
     assert.ok(ok.json.durationMs > 1500 && ok.json.durationMs < 2600, String(ok.json.durationMs));
-    const file = path.join(app.cfg.audioDir, `${ok.json.audioId}.m4a`);
+    const file = path.join(app.cfg.audioDir, `${ok.json.audioId}.mp3`);
     assert.ok(fs.existsSync(file));
     const play = await c.get(`/api/audio/${ok.json.audioId}`, { range: 'bytes=0-9' });
     assert.equal(play.status, 206);
-    assert.equal(play.res.headers['content-type'], 'audio/mp4');
+    assert.equal(play.res.headers['content-type'], 'audio/mpeg');
     assert.match(play.res.headers['cache-control'], /private/);
     // Replacing deletes the old file.
     const again = await c.put(`/api/logs/${log.id}/audio`, testClip(), audioHeaders);
@@ -213,7 +213,7 @@ describe('audio & community', () => {
     assert.equal((await (await guest(app)).get(`/api/audio/${again.json.audioId}`)).status, 404);
     assert.equal((await client(app).get(`/api/audio/${again.json.audioId}`)).status, 404);
     await c.del(`/api/logs/${log.id}`);
-    assert.ok(!fs.existsSync(path.join(app.cfg.audioDir, `${again.json.audioId}.m4a`)), 'deleting log deletes clip');
+    assert.ok(!fs.existsSync(path.join(app.cfg.audioDir, `${again.json.audioId}.mp3`)), 'deleting log deletes clip');
   });
 
   test('posting requires a claimed account and a clip', async () => {
@@ -298,7 +298,7 @@ describe('audio & community', () => {
   test('account deletion removes everything including files', async () => {
     const m = await member(app, 'leaver');
     const { log } = await postedClip(m);
-    const file = path.join(app.cfg.audioDir, `${log.audioId}.m4a`);
+    const file = path.join(app.cfg.audioDir, `${log.audioId}.mp3`);
     assert.ok(fs.existsSync(file));
     assert.equal((await m.del('/api/me', { confirm: 'wrong' })).status, 400);
     assert.equal((await m.del('/api/me', { confirm: 'LEAVER' })).status, 200);
@@ -486,5 +486,50 @@ describe('gut checks', () => {
     assert.equal(s.days, 365);
     assert.equal(s.triggers[0].id, 'dairy');
     assert.equal((await c.get('/api/me')).json.user.isPremium, undefined);
+  });
+});
+
+describe('type sounds', () => {
+  let app;
+  before(async () => { app = await makeApp(); });
+  after(() => app.close());
+
+  test('every fart and burp type has a playable studio sample', async () => {
+    const { KINDS } = await import('../public/js/catalog.js');
+    const c = client(app);
+    let n = 0;
+    for (const k of Object.values(KINDS)) {
+      for (const t of k.groups.flatMap((g) => g.types)) {
+        const r = await c.get(`/sounds/${k.id}-${t.id}.mp3`, { range: 'bytes=0-15' });
+        assert.equal(r.status, 206, `${k.id}-${t.id}`);
+        assert.equal(r.res.headers['content-type'], 'audio/mpeg');
+        n++;
+      }
+    }
+    assert.equal(n, 39);
+  });
+
+  test('champions: top visible clip per type with 3+ reactions', async () => {
+    const author = await member(app, 'champ');
+    const fans = [];
+    for (const name of ['fan_a', 'fan_b', 'fan_c']) fans.push(await member(app, name));
+    const post = async (type) => {
+      const log = (await author.post('/api/logs', { kind: 'fart', type, tzOffset: 0 })).json;
+      await author.put(`/api/logs/${log.id}/audio`, testClip(), audioHeaders);
+      return { id: (await author.post('/api/posts', { logId: log.id })).json.id, audioId: (await author.get(`/api/logs?date=${today()}`)).json.logs.find((l) => l.id === log.id).audioId };
+    };
+    const best = await post('thunder');
+    const runnerUp = await post('thunder');
+    const tooFew = await post('toot');
+    for (const f of fans) await f.put(`/api/posts/${best.id}/reaction`, { emoji: 'fire' });
+    for (const f of fans.slice(0, 2)) await f.put(`/api/posts/${runnerUp.id}/reaction`, { emoji: 'laugh' });
+    for (const f of fans.slice(0, 2)) await f.put(`/api/posts/${tooFew.id}/reaction`, { emoji: 'clap' });
+    let { champions } = (await client(app).get('/api/posts/champions')).json;
+    assert.deepEqual(Object.keys(champions), ['fart:thunder']);
+    assert.equal(champions['fart:thunder'].audioId, best.audioId);
+    assert.equal(champions['fart:thunder'].username, 'champ');
+    app.db.prepare('UPDATE posts SET hidden = 1 WHERE id = ?').run(best.id);
+    ({ champions } = (await client(app).get('/api/posts/champions')).json);
+    assert.equal(champions['fart:thunder'], undefined, 'hidden clips never become champions');
   });
 });
