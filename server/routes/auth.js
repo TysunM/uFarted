@@ -3,6 +3,7 @@ import {
   usernameProblem, passwordProblem,
 } from '../auth.js';
 import { requireUser, requireAccount } from '../app.js';
+import { checkAge } from '../../public/js/age.js';
 
 const strictLimit = { rateLimit: { max: 10, timeWindow: '15 minutes' } };
 // Keyed by IP, not session: free guest sessions must not each get their own password-guessing budget.
@@ -66,9 +67,15 @@ export default async function authRoutes(app) {
 
   app.post('/auth/guest', {
     config: { rateLimit: { max: 60, timeWindow: '1 hour' } }, // generous: carrier NAT puts many people on one IP
-    schema: { body: { type: 'object', required: ['ageOk'], properties: { ageOk: { const: true } } } },
+    // Neutral age screen, re-checked here so the API can't be used to skip it. Birth year is never stored.
+    schema: { body: { type: 'object', required: ['birthYear'], additionalProperties: false, properties: {
+      birthYear: { type: 'integer', minimum: 1900, maximum: 2100 },
+      birthMonth: { type: 'integer', minimum: 1, maximum: 12 } } } },
   }, async (req, reply) => {
     if (req.user) return { user: publicUser(req.user) };
+    const age = checkAge(req.body.birthYear, req.body.birthMonth);
+    if (age.needMonth) return reply.code(400).send({ error: 'Please pick your birth month too.' });
+    if (!age.ok) return reply.code(403).send({ error: 'Accounts are for ages 13 and up.' });
     const now = Date.now();
     const id = Number(q.createUser.run(now, now).lastInsertRowid);
     startSession(reply, id);

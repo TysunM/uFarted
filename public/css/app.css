@@ -247,6 +247,7 @@ details.triggers > .chips { margin-top: 10px; }
 .welcome { min-height: 100vh; display: grid; align-content: center; gap: 22px; max-width: 440px; margin: 0 auto; padding: 32px 16px calc(32px + env(safe-area-inset-bottom)); text-align: center; }
 .logo { font-size: 72px; line-height: 1; animation: puff 2.4s ease-in-out infinite; }
 .welcome h1 { font-size: 2.3rem; }
+.welcome .age { text-align: left; }
 .features { display: grid; gap: 10px; text-align: left; }
 .features div { display: flex; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px 14px; font-weight: 600; }
 .features span { font-size: 1.5rem; }

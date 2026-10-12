@@ -41,7 +41,7 @@ export function client(app) {
 
 export async function guest(app) {
   const c = client(app);
-  await c.post('/api/auth/guest', { ageOk: true });
+  await c.post('/api/auth/guest', { birthYear: new Date().getFullYear() - 30 });
   return c;
 }
 

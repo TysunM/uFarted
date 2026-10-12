@@ -12,14 +12,24 @@ describe('auth', () => {
   before(async () => { app = await makeApp(); });
   after(() => app.close());
 
-  test('guest requires age confirmation', async () => {
+  test('neutral age screen: 13+ only, checked server-side, nothing stored', async () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
     const c = client(app);
     assert.equal((await c.post('/api/auth/guest', {})).status, 400);
-    assert.equal((await c.post('/api/auth/guest', { ageOk: false })).status, 400);
-    const r = await c.post('/api/auth/guest', { ageOk: true });
+    assert.equal((await c.post('/api/auth/guest', { ageOk: true })).status, 400, 'old checkbox payload is rejected');
+    assert.equal((await c.post('/api/auth/guest', { birthYear: y - 10 })).status, 403);
+    assert.equal((await c.post('/api/auth/guest', { birthYear: y - 13 })).status, 400, 'borderline year needs the month');
+    assert.equal((await c.post('/api/auth/guest', { birthYear: y - 13, birthMonth: m })).status, 403, 'birthday month counts as not yet');
+    if (m < 12) assert.equal((await c.post('/api/auth/guest', { birthYear: y - 13, birthMonth: 12 })).status, 403);
+    if (m > 1) assert.equal((await client(app).post('/api/auth/guest', { birthYear: y - 13, birthMonth: 1 })).status, 200);
+    assert.equal((await c.get('/api/me')).json.user, null, 'no session for under-13s');
+    const r = await c.post('/api/auth/guest', { birthYear: y - 14 });
     assert.equal(r.status, 200);
     assert.equal(r.json.user.isGuest, true);
-    assert.equal((await c.get('/api/me')).json.user.isGuest, true);
+    const cols = app.db.prepare('PRAGMA table_info(users)').all().map((col) => col.name);
+    assert.ok(!cols.some((n) => /birth|age/.test(n)), 'birth date is not stored');
   });
 
   test('claim validates usernames and passwords', async () => {
@@ -344,7 +354,7 @@ describe('review hardening', () => {
     let statuses = [];
     for (let s = 0; s < 3; s++) {
       const c = client(app);
-      await c.post('/api/auth/guest', { ageOk: true }, headers);
+      await c.post('/api/auth/guest', { birthYear: 1990 }, headers);
       for (let i = 0; i < 4; i++) statuses.push((await c.post('/api/auth/login', { username: 'target', password: 'wrong-guess' }, headers)).status);
     }
     assert.equal(statuses.filter((s) => s === 401).length, 10);

@@ -6,6 +6,7 @@ import { renderInsights } from './views/insights.js';
 import { renderCommunity } from './views/community.js';
 import { renderMe, loginSheet } from './views/me.js';
 import { openLogSheet } from './logsheet.js';
+import { checkAge, MIN_AGE } from './age.js';
 
 const root = document.getElementById('app');
 const TABS = [
@@ -49,14 +50,54 @@ async function route() {
   }
 }
 
+const UNDER_AGE_KEY = 'ufarted_under_age';
+const rememberUnderAge = () => { try { localStorage.setItem(UNDER_AGE_KEY, '1'); } catch { /* storage blocked */ } };
+const isUnderAge = () => { try { return localStorage.getItem(UNDER_AGE_KEY) === '1'; } catch { return false; } };
+const browseCommunity = (e) => { e?.preventDefault(); location.hash = '#/community'; showShell(); };
+
+// Shown to under-13s, and on later visits from the same device, so going back can't change the answer.
+function tooYoung() {
+  root.replaceChildren(el('div', { class: 'welcome' },
+    el('div', { class: 'logo', 'aria-hidden': 'true' }, '🎈'),
+    el('div', { class: 'stack tight' }, el('h1', {}, 'Almost!'),
+      el('p', { class: 'muted' }, `${state.config.appName} accounts are for ages 13 and up. You can still listen to the funniest clips in the community — no account needed.`)),
+    el('button', { class: 'btn primary block', onclick: browseCommunity }, '🎧 Listen to the community'),
+    el('p', { class: 'small muted' }, 'Got a tummy question? Ask a grown-up you trust.'),
+    el('button', { class: 'btn ghost sm', onclick: () => loginSheet(boot) }, 'Grown-up with an account? Log in')));
+}
+
+// Neutral age screen: asks the year without hinting at the cutoff (FTC COPPA guidance).
 function welcome() {
-  const age = el('input', { type: 'checkbox', id: 'age' });
+  if (isUnderAge()) return tooYoung();
+  const thisYear = new Date().getFullYear();
+  const year = el('select', { class: 'input', id: 'birth-year', 'aria-label': 'Birth year' },
+    el('option', { value: '', disabled: true, selected: true }, 'Select year'),
+    Array.from({ length: 101 }, (_, i) => el('option', { value: thisYear - i }, thisYear - i)));
+  const month = el('select', { class: 'input', id: 'birth-month', 'aria-label': 'Birth month' },
+    el('option', { value: '', disabled: true, selected: true }, 'Select month'),
+    Array.from({ length: 12 }, (_, i) => el('option', { value: i + 1 }, new Date(2000, i, 1).toLocaleDateString([], { month: 'long' }))));
+  const monthField = el('label', { class: 'field hidden', for: 'birth-month' }, 'And the month?', month);
   const go = el('button', { class: 'btn primary block', disabled: true }, 'Start tracking — it’s free');
-  age.addEventListener('change', () => { go.disabled = !age.checked; });
+  const answer = () => checkAge(Number(year.value), Number(month.value) || undefined);
+  const update = () => {
+    const a = year.value ? answer() : null;
+    monthField.classList.toggle('hidden', Number(year.value) !== thisYear - MIN_AGE); // only the borderline year needs a month
+    go.disabled = !a || Boolean(a.needMonth);
+  };
+  year.addEventListener('change', () => { month.value = ''; update(); });
+  month.addEventListener('change', update);
   go.addEventListener('click', async () => {
+    const a = answer();
+    if (!a.ok) { rememberUnderAge(); return tooYoung(); }
     go.disabled = true;
-    try { await api('/auth/guest', { method: 'POST', body: { ageOk: true } }); await boot(); }
-    catch (err) { toast(err.message, { error: true }); go.disabled = false; }
+    try {
+      await api('/auth/guest', { method: 'POST', body: { birthYear: Number(year.value), birthMonth: Number(month.value) || undefined } });
+      await boot();
+    } catch (err) {
+      if (err.status === 403) { rememberUnderAge(); return tooYoung(); }
+      toast(err.message, { error: true });
+      go.disabled = false;
+    }
   });
   root.replaceChildren(el('div', { class: 'welcome' },
     el('div', { class: 'logo', 'aria-hidden': 'true' }, '💨'),
@@ -67,10 +108,14 @@ function welcome() {
       el('div', {}, el('span', {}, '💨'), 'Log farts & burps — 39 types, from Toot to Thunderclap'),
       el('div', {}, el('span', {}, '📋'), 'Bring a printable report to your doctor'),
       el('div', {}, el('span', {}, '🎙️'), 'Record the legendary ones & share them')),
-    el('label', { class: 'check', for: 'age' }, age, el('span', {}, 'I’m 13 or older and agree to the ', el('a', { href: '/terms', target: '_blank' }, 'Terms'), ' and ', el('a', { href: '/privacy', target: '_blank' }, 'Privacy Policy'), '.')),
+    el('div', { class: 'stack tight age' },
+      el('label', { class: 'field', for: 'birth-year' }, 'What year were you born?', year),
+      monthField),
     go,
+    el('p', { class: 'tiny muted' }, 'By continuing you agree to the ', el('a', { href: '/terms', target: '_blank' }, 'Terms'), ' and ',
+      el('a', { href: '/privacy', target: '_blank' }, 'Privacy Policy'), '. We only use your birth year to check your age — it isn’t saved.'),
     el('button', { class: 'btn ghost', onclick: () => loginSheet(boot) }, 'I already have an account'),
-    el('a', { class: 'small', href: '#/community', onclick: (e) => { e.preventDefault(); location.hash = '#/community'; showShell(); } }, 'Just browse the community →')));
+    el('a', { class: 'small', href: '#/community', onclick: browseCommunity }, 'Just browse the community →')));
 }
 
 function showShell() {

@@ -27,13 +27,35 @@ try {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(e.message));
 
-  step('welcome → start as guest');
+  step('under-13: friendly screen, sticks after reload, can still listen to the community');
+  const kidCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const kid = await kidCtx.newPage();
+  kid.on('pageerror', (e) => errors.push(e.message));
+  const thisYear = new Date().getFullYear();
+  await kid.goto(base);
+  await kid.locator('#birth-year').selectOption(String(thisYear - 9));
+  await kid.getByRole('button', { name: /Start tracking/ }).click();
+  await kid.getByRole('heading', { name: 'Almost!' }).waitFor();
+  await kid.screenshot({ path: `${shots}00-under-13.png` });
+  await kid.reload();
+  await kid.getByRole('heading', { name: 'Almost!' }).waitFor();
+  await kid.getByRole('button', { name: /Listen to the community/ }).click();
+  await kid.getByRole('heading', { name: 'Community' }).waitFor();
+  assert.equal((await kidCtx.cookies()).length, 0, 'no session cookie for under-13s');
+  await kidCtx.close();
+
+  step('welcome → neutral age question → start as guest');
   await page.goto(base);
   await page.getByText('The fart tracker for your gut health. Free.').waitFor();
+  const start = page.getByRole('button', { name: /Start tracking/ });
+  assert.equal(await start.isDisabled(), true, 'needs an answer first');
+  await page.locator('#birth-year').selectOption(String(thisYear - 13));
+  assert.equal(await page.locator('#birth-month').isVisible(), true, 'borderline year asks for the month');
+  assert.equal(await start.isDisabled(), true);
+  await page.locator('#birth-year').selectOption(String(thisYear - 30));
+  assert.equal(await page.locator('#birth-month').isVisible(), false);
   await page.screenshot({ path: `${shots}01-welcome.png` });
-  assert.equal(await page.getByRole('button', { name: /Start tracking/ }).isDisabled(), true, 'age gate');
-  await page.locator('#age').check();
-  await page.getByRole('button', { name: /Start tracking/ }).click();
+  await start.click();
   await page.getByRole('heading', { name: 'Today', exact: true }).waitFor();
 
   step('daily gut check: 2 taps, persists across reloads');
