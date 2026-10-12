@@ -1,5 +1,5 @@
 {
-  "name": "{{APP}} — gut health tracker",
+  "name": "{{APP}} — Fart Tracker",
   "short_name": "{{APP}}",
   "description": "Free gut-health tracker with a sense of humor: bloating check-ins, food triggers, fart & burp logs, doctor report.",
   "start_url": "/#/today",

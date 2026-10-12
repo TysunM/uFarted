@@ -60,7 +60,7 @@ function welcome() {
   });
   root.replaceChildren(el('div', { class: 'welcome' },
     el('div', { class: 'logo', 'aria-hidden': 'true' }, '💨'),
-    el('div', { class: 'stack tight' }, el('h1', {}, state.config.appName), el('p', { class: 'muted' }, 'Gut health, with a sense of humor. Free.')),
+    el('div', { class: 'stack tight' }, el('h1', {}, state.config.appName), el('p', { class: 'muted' }, 'The fart tracker for your gut health. Free.')),
     el('div', { class: 'features' },
       el('div', {}, el('span', {}, '🩺'), 'Check in on bloating & belly pain — 2 taps a day'),
       el('div', {}, el('span', {}, '🧪'), 'Find the foods that set you off'),

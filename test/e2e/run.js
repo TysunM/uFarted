@@ -10,7 +10,7 @@ import { buildApp } from '../../server/app.js';
 
 const shots = new URL('./shots/', import.meta.url).pathname;
 fs.mkdirSync(shots, { recursive: true });
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ufart-e2e-'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ufarted-e2e-'));
 const app = await buildApp(loadConfig({ dataDir, port: 0 }), { logger: false });
 await app.listen({ port: 0, host: '127.0.0.1' });
 const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -29,7 +29,7 @@ try {
 
   step('welcome → start as guest');
   await page.goto(base);
-  await page.getByText('Gut health, with a sense of humor. Free.').waitFor();
+  await page.getByText('The fart tracker for your gut health. Free.').waitFor();
   await page.screenshot({ path: `${shots}01-welcome.png` });
   assert.equal(await page.getByRole('button', { name: /Start tracking/ }).isDisabled(), true, 'age gate');
   await page.locator('#age').check();

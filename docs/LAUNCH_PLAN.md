@@ -1,6 +1,6 @@
-# uFart: Launch Plan
+# uFarted: Launch Plan
 
-**Decisions so far:** the name is **uFart**. It's a gut-health tracker first and a joke second (option 1). Free, with no payments. Ads might come later. It lives in its own repository.
+**Decisions so far:** the name is **uFarted**, with "Fart Tracker" as the search keyword in the title. It's a gut-health tracker first and a joke second (option 1). Free, with no payments. Ads might come later. It lives in its own repository.
 
 ## 1. Premise check
 
@@ -12,7 +12,7 @@
 
 ## 2. Positioning (option 1)
 
-**"Gut health, with a sense of humor. Free."**
+**"uFarted — the fart tracker for your gut health. Free."**
 
 - **Core (why people stay):** a 2-tap daily gut check (bloating + belly pain), trigger tagging, and a "bloating on days with X vs without" comparison. This is what people with IBS or regular bloating want, and that's about 5–10% of adults.
 - **Hook (why people share):** 39 fart and burp types, recordings, "Fart of the Day", share cards.
@@ -54,7 +54,7 @@ Apple's Guideline **4.3(b)** names fart and burp apps as low-value. The PWA avoi
 
 ## 7. Launch checklist
 
-- [ ] **Name check before buying the domain.** Search [tmsearch.uspto.gov](https://tmsearch.uspto.gov) for UFART and IFART. uFart is one letter off InfoMedia's *iFart*, which is still on the App Store. The only earlier "uFart" app was abandoned in 2013. To rename, set `APP_NAME` and re-run `node scripts/make-icons.js`.
+- [ ] **Name check before buying the domain.** Search [tmsearch.uspto.gov](https://tmsearch.uspto.gov) for UFARTED. No app uses the name today, and it's clearly distinct from InfoMedia's *iFart*. "Fart Tracker" is the search keyword in the title, not the brand: it's too descriptive to own. To rename, set `APP_NAME` and re-run `node scripts/make-icons.js`.
 - [ ] Domain + DNS, then `docker compose up -d --build`
 - [ ] `SUPPORT_EMAIL` set. The privacy policy and app stores require one.
 - [ ] `MOD_WEBHOOK_URL` set (ntfy), so you see reports within minutes.

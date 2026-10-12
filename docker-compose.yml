@@ -1,14 +1,14 @@
 services:
   app:
     build: .
-    image: ufart:latest
+    image: ufarted:latest
     restart: unless-stopped
     env_file: .env
     environment:
       NODE_ENV: production
       DATA_DIR: /data
     volumes:
-      - ufart-data:/data
+      - ufarted-data:/data
     expose: ["3000"]
     read_only: true
     tmpfs: [/tmp]
@@ -35,6 +35,6 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
 volumes:
-  ufart-data:
+  ufarted-data:
   caddy-data:
   caddy-config:
