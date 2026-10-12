@@ -6,14 +6,14 @@ const int = (v, d) => (Number.isFinite(Number.parseInt(v, 10)) ? Number.parseInt
 export function loadConfig(overrides = {}) {
   const dataDir = path.resolve(overrides.dataDir ?? env.DATA_DIR ?? './data');
   const cfg = {
-    appName: env.APP_NAME || 'iFart',
+    appName: env.APP_NAME || 'uFart',
     publicUrl: (env.PUBLIC_URL || '').replace(/\/$/, ''),
     port: int(env.PORT, 3000),
     host: env.HOST || '0.0.0.0',
     production: env.NODE_ENV === 'production',
     trustProxy: env.TRUST_PROXY ?? 'loopback,uniquelocal',
     dataDir,
-    dbFile: path.join(dataDir, 'ifart.db'),
+    dbFile: path.join(dataDir, 'ufart.db'),
     audioDir: path.join(dataDir, 'audio'),
     backupDir: path.join(dataDir, 'backups'),
     backupKeep: int(env.BACKUP_KEEP, 7),

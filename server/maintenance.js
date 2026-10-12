@@ -7,9 +7,9 @@ const DAY = 86_400_000;
 export async function runMaintenance(app) {
   const { db, cfg, audio, log } = app;
   await fs.mkdir(cfg.backupDir, { recursive: true });
-  const file = path.join(cfg.backupDir, `ifart-${new Date().toISOString().slice(0, 10)}.db`);
+  const file = path.join(cfg.backupDir, `ufart-${new Date().toISOString().slice(0, 10)}.db`);
   await db.backup(file);
-  const backups = (await fs.readdir(cfg.backupDir)).filter((f) => /^ifart-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort();
+  const backups = (await fs.readdir(cfg.backupDir)).filter((f) => /^ufart-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort();
   await Promise.all(backups.slice(0, -cfg.backupKeep).map((f) => fs.rm(path.join(cfg.backupDir, f), { force: true })));
 
   const now = Date.now();

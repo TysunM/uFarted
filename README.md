@@ -1,4 +1,4 @@
-# iFart 🩺💨
+# uFart 🩺💨
 
 Free gut-health tracking with a sense of humor. Check in on bloating and belly pain, find the foods that set you off, log every fart and burp (39 researched types), and bring a printable report to your doctor. Record the legendary ones and share them with the community.
 
@@ -21,8 +21,8 @@ It's an installable PWA (Add to Home Screen), so you don't need the App Store to
 Needs Node 22+ and ffmpeg (`sudo apt install ffmpeg`).
 
 ```bash
-git clone https://github.com/TysunM/ifart.git
-cd ifart
+git clone https://github.com/TysunM/ufart.git
+cd ufart
 npm ci
 npm run dev        # http://localhost:3000
 npm test           # 32 API tests
@@ -31,7 +31,7 @@ npm run e2e        # real-browser test with a fake microphone (Chromium)
 
 ## Deploy to your Hetzner server
 
-**1. DNS.** Create an `A` record for your domain (e.g. `ifart.yourdomain.com`) that points at the server's IP.
+**1. DNS.** Create an `A` record for your domain (e.g. `ufart.yourdomain.com`) that points at the server's IP.
 
 **2. Server prep.** Skip anything that's already installed:
 
@@ -45,17 +45,17 @@ sudo ufw allow 80,443/tcp && sudo ufw allow 443/udp
 **3. Get the code**
 
 ```bash
-git clone https://github.com/TysunM/ifart.git
-cd ifart
+git clone https://github.com/TysunM/ufart.git
+cd ufart
 ```
 
 **4. Configure.** Edit the values below, then paste the block:
 
 ```bash
 cat > .env <<'ENVEOF'
-DOMAIN=ifart.yourdomain.com
-PUBLIC_URL=https://ifart.yourdomain.com
-APP_NAME=iFart
+DOMAIN=ufart.yourdomain.com
+PUBLIC_URL=https://ufart.yourdomain.com
+APP_NAME=uFart
 SUPPORT_EMAIL=you@yourdomain.com
 REPORT_HIDE_THRESHOLD=3
 MOD_WEBHOOK_URL=https://ntfy.sh/pick-a-long-random-topic-name
@@ -68,7 +68,7 @@ For `MOD_WEBHOOK_URL`, install the free **ntfy** app on your phone and subscribe
 
 ```bash
 docker compose up -d --build
-curl -s https://ifart.yourdomain.com/healthz   # → {"ok":true}
+curl -s https://ufart.yourdomain.com/healthz   # → {"ok":true}
 ```
 
 On your phone, open the site and tap **Share → Add to Home Screen**. Claim your username, then make yourself a moderator:
@@ -99,17 +99,17 @@ A post is hidden automatically after `REPORT_HIDE_THRESHOLD` different users rep
 Every 24 h the app writes a consistent SQLite backup to the data volume and keeps the last 7. Copy them **off the server** too, for example nightly to a Hetzner Storage Box:
 
 ```bash
-cat > /usr/local/bin/ifart-offsite.sh <<'SHEOF'
+cat > /usr/local/bin/ufart-offsite.sh <<'SHEOF'
 #!/bin/sh
 set -e
-VOL=$(docker volume inspect -f '{{.Mountpoint}}' ifart_ifart-data)
-rsync -a --delete -e "ssh -p 23" "$VOL/" uXXXXXX@uXXXXXX.your-storagebox.de:ifart/
+VOL=$(docker volume inspect -f '{{.Mountpoint}}' ufart_ufart-data)
+rsync -a --delete -e "ssh -p 23" "$VOL/" uXXXXXX@uXXXXXX.your-storagebox.de:ufart/
 SHEOF
-chmod +x /usr/local/bin/ifart-offsite.sh
-( crontab -l 2>/dev/null; echo "30 3 * * * /usr/local/bin/ifart-offsite.sh" ) | crontab -
+chmod +x /usr/local/bin/ufart-offsite.sh
+( crontab -l 2>/dev/null; echo "30 3 * * * /usr/local/bin/ufart-offsite.sh" ) | crontab -
 ```
 
-To restore, stop the app, copy a `backups/ifart-YYYY-MM-DD.db` over `ifart.db` in the volume, and start the app again.
+To restore, stop the app, copy a `backups/ufart-YYYY-MM-DD.db` over `ufart.db` in the volume, and start the app again.
 
 ## Adding ads later
 

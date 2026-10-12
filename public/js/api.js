@@ -1,5 +1,5 @@
 // Fetch wrapper + offline queue for logs (so a gassy moment in a dead zone still counts).
-const QUEUE_KEY = 'ifart_offline_queue';
+const QUEUE_KEY = 'ufart_offline_queue';
 
 export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status; }

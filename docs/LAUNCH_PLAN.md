@@ -1,6 +1,6 @@
-# iFart: Launch Plan
+# uFart: Launch Plan
 
-**Decisions so far:** the name is **iFart**. It's a gut-health tracker first and a joke second (option 1). Free, with no payments. Ads might come later. It lives in its own repository.
+**Decisions so far:** the name is **uFart**. It's a gut-health tracker first and a joke second (option 1). Free, with no payments. Ads might come later. It lives in its own repository.
 
 ## 1. Premise check
 
@@ -54,7 +54,7 @@ Apple's Guideline **4.3(b)** names fart and burp apps as low-value. The PWA avoi
 
 ## 7. Launch checklist
 
-- [ ] **Name check before buying the domain.** "iFart" was InfoMedia's hit 2008 App Store app (*iFart Mobile*). Search tmsearch.uspto.gov for IFART; if a live registration covers apps, rename before launch (set `APP_NAME`, re-run `node scripts/make-icons.js`).
+- [ ] **Name check before buying the domain.** Search [tmsearch.uspto.gov](https://tmsearch.uspto.gov) for UFART and IFART. uFart is one letter off InfoMedia's *iFart*, which is still on the App Store. The only earlier "uFart" app was abandoned in 2013. To rename, set `APP_NAME` and re-run `node scripts/make-icons.js`.
 - [ ] Domain + DNS, then `docker compose up -d --build`
 - [ ] `SUPPORT_EMAIL` set. The privacy policy and app stores require one.
 - [ ] `MOD_WEBHOOK_URL` set (ntfy), so you see reports within minutes.

@@ -6,7 +6,7 @@ const scrypt = promisify(crypto.scrypt);
 const SCRYPT = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const DAY = 86_400_000;
 export const SESSION_DAYS = 180;
-export const COOKIE = 'ifart_sid';
+export const COOKIE = 'ufart_sid';
 
 export async function hashSecret(secret) {
   const salt = crypto.randomBytes(16);
@@ -35,7 +35,7 @@ export const normalizeRecovery = (code) => String(code || '').toUpperCase().repl
 
 const profanity = new RegExpMatcher({ ...englishDataset.build(), ...englishRecommendedTransformers });
 const RESERVED = new Set(['admin', 'administrator', 'root', 'support', 'moderator', 'mod', 'staff', 'system',
-  'ifart', 'official', 'null', 'undefined', 'anonymous', 'guest', 'help', 'api']);
+  'ufart', 'official', 'null', 'undefined', 'anonymous', 'guest', 'help', 'api']);
 
 export function usernameProblem(username) {
   if (typeof username !== 'string' || !/^[A-Za-z0-9_]{3,20}$/.test(username)) {

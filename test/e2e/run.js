@@ -10,7 +10,7 @@ import { buildApp } from '../../server/app.js';
 
 const shots = new URL('./shots/', import.meta.url).pathname;
 fs.mkdirSync(shots, { recursive: true });
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ifart-e2e-'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ufart-e2e-'));
 const app = await buildApp(loadConfig({ dataDir, port: 0 }), { logger: false });
 await app.listen({ port: 0, host: '127.0.0.1' });
 const base = `http://127.0.0.1:${app.server.address().port}`;

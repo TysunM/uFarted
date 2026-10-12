@@ -362,7 +362,7 @@ describe('review hardening', () => {
     const c = await guest(app);
     app.db.prepare('UPDATE sessions SET expires_at = ?').run(Date.now() + 86_400_000);
     const r = await c.get('/api/me');
-    const set = r.res.cookies.find((k) => k.name === 'ifart_sid');
+    const set = r.res.cookies.find((k) => k.name === 'ufart_sid');
     assert.ok(set, 'Set-Cookie present');
     assert.ok(set.maxAge > 170 * 86400);
     assert.equal((await c.get('/api/me')).res.cookies.length, 0, 'not re-sent on every request');
