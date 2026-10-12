@@ -48,7 +48,7 @@ export function createAudioService(cfg) {
   const limit = semaphore(cfg.ffmpegConcurrency);
 
   async function processClip(buffer) {
-    const tmp = path.join(os.tmpdir(), `tt-${crypto.randomUUID()}`);
+    const tmp = path.join(os.tmpdir(), `ifart-${crypto.randomUUID()}`);
     const id = crypto.randomUUID();
     const out = path.join(cfg.audioDir, `${id}.m4a`);
     await fs.writeFile(tmp, buffer);

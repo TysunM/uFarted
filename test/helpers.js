@@ -6,7 +6,7 @@ import { loadConfig } from '../server/config.js';
 import { buildApp } from '../server/app.js';
 
 export async function makeApp(overrides = {}) {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-test-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ifart-test-'));
   const cfg = loadConfig({ dataDir, ...overrides });
   const app = await buildApp(cfg, { logger: false });
   app.addHook('onClose', async () => fs.rmSync(dataDir, { recursive: true, force: true }));
@@ -23,8 +23,8 @@ export function client(app) {
     if (Buffer.isBuffer(body)) opts.payload = body;
     else if (body !== undefined) { opts.payload = body; opts.headers['content-type'] ??= 'application/json'; }
     const res = await app.inject(opts);
-    const set = res.cookies.find((c) => c.name === 'tt_sid');
-    if (set) cookie = set.value ? `tt_sid=${set.value}` : '';
+    const set = res.cookies.find((c) => c.name === 'ifart_sid');
+    if (set) cookie = set.value ? `ifart_sid=${set.value}` : '';
     let json;
     try { json = res.json(); } catch { json = undefined; }
     return { status: res.statusCode, json, res };
@@ -56,7 +56,7 @@ export async function member(app, username, password = 'password123') {
 let clip;
 export function testClip() {
   if (!clip) {
-    const file = path.join(os.tmpdir(), 'tt-test-clip.webm');
+    const file = path.join(os.tmpdir(), 'ifart-test-clip.webm');
     execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=90:duration=2', '-c:a', 'libopus', file]);
     clip = fs.readFileSync(file);
   }

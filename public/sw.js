@@ -1,5 +1,5 @@
 // App-shell cache so the app opens offline. API calls and audio always go to the network.
-const CACHE = 'tt-shell-v2';
+const CACHE = 'ifart-shell-v1';
 const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/ui.js', '/js/api.js', '/js/state.js', '/js/catalog.js', '/js/logsheet.js',
   '/js/recorder.js', '/js/player.js', '/js/share.js', '/js/views/today.js', '/js/views/insights.js', '/js/views/community.js',
   '/js/views/me.js', '/icons/icon.svg', '/manifest.webmanifest'];
