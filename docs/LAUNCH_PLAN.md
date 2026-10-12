@@ -54,9 +54,9 @@ Apple's Guideline **4.3(b)** names fart and burp apps as low-value. The PWA avoi
 
 ## 7. Launch checklist
 
-- [ ] **Name check before buying the domain.** Search [tmsearch.uspto.gov](https://tmsearch.uspto.gov) for UFARTED. No app uses the name today, and it's clearly distinct from InfoMedia's *iFart*. "Fart Tracker" is the search keyword in the title, not the brand: it's too descriptive to own. To rename, set `APP_NAME` and re-run `node scripts/make-icons.js`.
-- [ ] Domain on Cloudflare + tunnel token, then `docker compose up -d --build` (README → Go live for $0).
-- [ ] `SUPPORT_EMAIL` set. The privacy policy and app stores require one.
+- [x] Name cleared (no UFARTED results in the US trademark search) and domain bought: **ufarted.app**.
+- [ ] Domain on Cloudflare DNS + tunnel token, then `docker compose up -d --build` (README → Go live for $0).
+- [ ] Cloudflare Email Routing: `support@ufarted.app` forwarding to your inbox.
 - [ ] `MOD_WEBHOOK_URL` set (ntfy), so you see reports within minutes.
 - [ ] Claim your username, run `admin.js admin <you>`, and seed 5–10 community clips.
 - [ ] Weekly backup to your D: drive (README → Backups).

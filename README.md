@@ -33,9 +33,9 @@ npm run e2e        # real-browser test with a fake microphone (Chromium)
 
 Cloudflare Tunnel gives the app real HTTPS on your domain without opening router ports or paying for a server. It keeps working when you change Wi-Fi or move house. The only cost is a domain, about $10/yr.
 
-**1. Domain.** Buy one at Cloudflare Registrar (sold at cost), or add a domain you already own to a free Cloudflare account.
+**1. Domain (`ufarted.app`).** It must use Cloudflare's DNS. If you bought it somewhere else, add it to a free Cloudflare account and change the nameservers at your registrar to the two Cloudflare gives you. That usually takes effect within an hour. `.app` domains only ever load over HTTPS, and the tunnel provides it.
 
-**2. Create the tunnel.** In the Cloudflare dashboard, go to **Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared**, name it `ufarted`, pick **Docker**, and copy the long token from the command it shows. Under **Public hostname**, choose your domain, set the type to `HTTP`, and the URL to `app:3000`. (Menu names shift a little between dashboard versions.)
+**2. Create the tunnel.** In the Cloudflare dashboard, go to **Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared**, name it `ufarted`, pick **Docker**, and copy the long token from the command it shows. Under **Public hostname**, choose `ufarted.app` (leave the subdomain blank), set the type to `HTTP`, and the URL to `app:3000`. (Menu names shift a little between dashboard versions.)
 
 **3. Laptop.** Install **Docker Desktop for Windows** (WSL2 backend) and turn on **Settings → General → Start Docker Desktop when you sign in**. Then, in your WSL terminal, edit the values and paste:
 
@@ -45,10 +45,10 @@ cd ufarted
 cat > .env <<'ENVEOF'
 COMPOSE_PROFILES=tunnel
 TUNNEL_TOKEN=paste-your-tunnel-token-here
-DOMAIN=ufarted.com
-PUBLIC_URL=https://ufarted.com
+DOMAIN=ufarted.app
+PUBLIC_URL=https://ufarted.app
 APP_NAME=uFarted
-SUPPORT_EMAIL=you@yourdomain.com
+SUPPORT_EMAIL=support@ufarted.app
 REPORT_HIDE_THRESHOLD=3
 MOD_WEBHOOK_URL=https://ntfy.sh/pick-a-long-random-topic-name
 ENVEOF
@@ -57,7 +57,11 @@ docker compose up -d --build
 
 For `MOD_WEBHOOK_URL`, install the free **ntfy** app on your phone and subscribe to the same topic. You'll get a push on every report.
 
-**4. Check it.** On your phone, open your domain and tap **Share → Add to Home Screen**. Claim your username, then make yourself a moderator:
+**Free support email.** In Cloudflare, go to **Email → Email Routing** and forward `support@ufarted.app` to your Gmail. It's free, and your privacy policy and any app store listing need a support address.
+
+**`www` redirect (optional).** In Cloudflare, go to **Rules → Redirect Rules** and send `www.ufarted.app/*` to `https://ufarted.app/${1}` (301). Only `https://ufarted.app` is the app's address, so `www` must redirect rather than serve the app.
+
+**4. Check it.** On your phone, open https://ufarted.app and tap **Share → Add to Home Screen**. Claim your username, then make yourself a moderator:
 
 ```bash
 docker compose exec app node server/admin.js admin yourusername
