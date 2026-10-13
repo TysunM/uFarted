@@ -1,5 +1,5 @@
-// Procedural fart & burp synthesizer (Web Audio). Runs in a browser OfflineAudioContext at build time
-// (scripts/render-sounds.js) to produce public/sounds/*.mp3. Deterministic: a type always sounds the same.
+// Procedural burp synthesizer (Web Audio). Runs in a browser OfflineAudioContext at build time
+// (scripts/render-sounds.js). Deterministic: a type always sounds the same.
 
 const VOWELS = { a: [730, 1090], e: [530, 1840], i: [300, 2200], o: [570, 840], u: [440, 1020], uh: [600, 1100], ur: [490, 1350] };
 
@@ -167,50 +167,10 @@ function bubbles(c, out, t, o, rand) {
 }
 
 const VOICES = { fart, burp, air, bubbles };
-const CLASSIC = { dur: 0.9, f0: 105, f1: 75, flutter: 27, depth: 0.7, cutoff: 1000, q: 1.5, gain: 0.8, noise: 0.15 };
-const THUNDER = { dur: 1.1, f0: 75, f1: 50, flutter: 32, depth: 0.9, noise: 0.6, cutoff: 1600, gain: 1, jitter: 0.25 };
-
-// Each recipe: parts = [voice, startTime, options]; fx = muffle (Hz), echo, swell (walk-past volume).
+// Burp recipes. Farts are built from real recordings (scripts/render-sounds.js), burps are synthesized
+// until there are real burp recordings to build from.
+// Each recipe: parts = [voice, startTime, options]; fx.muffle = lowpass cutoff (Hz).
 export const RECIPES = {
-  'fart:classic': () => ({ parts: [['fart', 0, CLASSIC]] }),
-  'fart:toot': () => ({ parts: [['fart', 0, { dur: 0.3, f0: 230, f1: 210, wave: 'square', cutoff: 2400, q: 3, gain: 0.45, jitter: 0.05 }]] }),
-  'fart:double_tap': () => ({ parts: [
-    ['fart', 0, { dur: 0.26, f0: 150, f1: 130, flutter: 30, cutoff: 1300, gain: 0.75 }],
-    ['fart', 0.4, { dur: 0.32, f0: 128, f1: 100, flutter: 30, cutoff: 1200, gain: 0.75 }]] }),
-  'fart:morning': () => ({ parts: [['fart', 0, { dur: 2.3, f0: 92, f1: 58, flutter: 21, depth: 0.75, cutoff: 900, gain: 0.95, noise: 0.25, jitter: 0.18 }]] }),
-  'fart:squeaker': () => ({ parts: [['fart', 0, { dur: 0.55, f0: 700, f1: 880, wave: 'triangle', vibrato: 9, vibDepth: 40, cutoff: 4000, q: 10, gain: 0.55, jitter: 0.04 }]] }),
-  'fart:whistler': () => ({ parts: [['fart', 0, { dur: 1.7, f0: 480, f1: 360, wave: 'triangle', vibrato: 5, vibDepth: 35, cutoff: 3000, q: 6, gain: 0.65, jitter: 0.02 }]] }),
-  'fart:thunder': () => ({ parts: [['air', 0, { dur: 0.12, freq: 800, gain: 0.5, attack: 0.003, release: 0.08 }], ['fart', 0, THUNDER]] }),
-  'fart:foghorn': () => ({ parts: [['fart', 0, { dur: 2.6, f0: 62, f1: 58, flutter: 9, depth: 0.25, cutoff: 700, q: 2, gain: 0.95, jitter: 0.06 }]] }),
-  'fart:growler': () => ({ parts: [['fart', 0, { dur: 1.8, f0: 55, f1: 46, flutter: 16, depth: 0.8, cutoff: 650, gain: 1, noise: 0.3, jitter: 0.2 }]] }),
-  'fart:rapid_fire': (r) => ({ parts: Array.from({ length: 9 }, (_, i) =>
-    ['fart', i * 0.11, { dur: 0.07, f0: 140 * (0.85 + r() * 0.3), cutoff: 1400, gain: 0.7, attack: 0.005, release: 0.02 }]) }),
-  'fart:staircase': () => ({ parts: [160, 125, 95].map((f, i) =>
-    ['fart', i * 0.42, { dur: 0.34, f0: f, f1: f * 0.92, flutter: 26, depth: 0.6, cutoff: 1100, gain: 0.7 }]) }),
-  'fart:sbd': () => ({ parts: [['air', 0, { dur: 1.6, freq: 900, gain: 0.12, attack: 0.3, release: 0.5 }]] }), // a faint hiss: that's the joke
-  'fart:whisper': () => ({ parts: [['air', 0, { dur: 0.9, freq: 1400, gain: 0.1, attack: 0.1 }], ['fart', 0.1, { dur: 0.5, f0: 130, gain: 0.06, cutoff: 500 }]] }),
-  'fart:slow_leak': () => ({ parts: [
-    ['air', 0, { dur: 3.2, filter: 'bandpass', freq: 900, gain: 0.3, attack: 0.4, release: 0.8 }],
-    ['fart', 0, { dur: 3.2, f0: 170, f1: 150, flutter: 48, depth: 0.4, cutoff: 900, gain: 0.16, attack: 0.3, release: 0.6 }]] }),
-  'fart:squeeze': () => ({ parts: [['fart', 0, { dur: 1.5, f0: 320, f1: 200, wave: 'square', flutter: 42, depth: 0.5, cutoff: 2400, q: 9, gain: 0.4, jitter: 0.15 }]] }),
-  'fart:fake_out': () => ({ parts: [['fart', 0, { dur: 0.1, f0: 120, cutoff: 900, gain: 0.65, attack: 0.004, release: 0.03 }], ['air', 0.1, { dur: 0.25, gain: 0.05 }]] }),
-  'fart:crop_duster': (r) => ({ parts: Array.from({ length: 4 }, (_, i) =>
-    ['fart', i * 0.45, { dur: 0.3, f0: 110 * (0.9 + r() * 0.2), flutter: 26, cutoff: 1000, gain: 0.65 }]), fx: { swell: true } }),
-  'fart:dutch_oven': () => ({ parts: [['fart', 0, { ...CLASSIC, dur: 1.1, gain: 1 }]], fx: { muffle: 520 } }), // muffled, but above phone-speaker cutoff
-  'fart:elevator': () => ({ parts: [['fart', 0, CLASSIC]], fx: { echo: { delay: 0.045, feedback: 0.35, mix: 0.35 } } }),
-  'fart:cushion': () => ({ parts: [['fart', 0, THUNDER]], fx: { muffle: 450 } }),
-  'fart:echo': () => ({ parts: [['fart', 0, { ...CLASSIC, dur: 0.8 }]], fx: { echo: { delay: 0.16, feedback: 0.5, mix: 0.55 } } }),
-  'fart:bubbler': () => ({ parts: [['bubbles', 0, { dur: 1.4, freq: 220, gain: 0.45, gap: 0.07 }],
-    ['fart', 0, { dur: 1.2, f0: 70, flutter: 20, cutoff: 300, gain: 0.25 }]], fx: { muffle: 1200 } }),
-  'fart:workout': () => ({ parts: [['fart', 0, { dur: 0.38, f0: 170, f1: 240, flutter: 34, depth: 0.6, cutoff: 1600, q: 4, gain: 0.75 }]] }),
-  'fart:sneeze_combo': () => ({ parts: [
-    ['air', 0, { dur: 0.4, filter: 'bandpass', freq: 2600, sweepTo: 1200, q: 1.5, gain: 0.5, attack: 0.08, release: 0.1 }],
-    ['fart', 0.42, { dur: 0.45, f0: 130, f1: 105, flutter: 28, cutoff: 1100, gain: 0.75 }]] }),
-  'fart:hot': () => ({ parts: [['fart', 0, CLASSIC], ['air', 0, { dur: 0.9, filter: 'highpass', freq: 4000, gain: 0.08, crackle: true }]] }),
-  'fart:wet': () => ({ parts: [
-    ['fart', 0, { dur: 1.0, f0: 80, f1: 65, flutter: 16, depth: 0.9, noise: 0.8, sputter: true, cutoff: 1100, gain: 0.9, jitter: 0.3 }],
-    ['bubbles', 0.15, { dur: 0.7, freq: 160, gain: 0.25, gap: 0.05 }]] }),
-
   'burp:classic': () => ({ parts: [['burp', 0, { dur: 0.75, f0: 115, f1: 85, vowels: ['ur', 'uh', 'o'], gain: 0.9 }]] }),
   'burp:baby': () => ({ parts: [['burp', 0, { dur: 0.22, f0: 230, f1: 200, vowels: ['e', 'uh'], formantScale: 1.25, gain: 0.5, release: 0.06 }]] }),
   'burp:post_meal': () => ({ parts: [['burp', 0, { dur: 0.55, f0: 105, f1: 90, vowels: ['uh', 'a'], gain: 0.8 }],
@@ -236,39 +196,20 @@ const partEnd = ([, t, o]) => t + o.dur;
 export async function renderType(key, sampleRate = 44100) {
   const rand = seeded(key);
   const recipe = RECIPES[key](rand);
-  const fx = recipe.fx || {};
-  const tail = fx.echo ? fx.echo.delay * 8 : 0.05;
-  const length = Math.max(...recipe.parts.map(partEnd)) + tail + 0.05;
+  const length = Math.max(...recipe.parts.map(partEnd)) + 0.1;
   const c = new OfflineAudioContext(1, Math.ceil(length * sampleRate), sampleRate);
   const bus = c.createGain();
-  let node = bus;
-  if (fx.muffle) {
-    const lp = c.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = fx.muffle;
-    node = node.connect(lp);
-  }
-  if (fx.swell) { // someone walking past: quiet → loud → quiet
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.25, 0);
-    g.gain.linearRampToValueAtTime(1, length * 0.45);
-    g.gain.linearRampToValueAtTime(0.25, length);
-    node = node.connect(g);
-  }
   const master = c.createDynamicsCompressor();
   master.threshold.value = -10;
   master.ratio.value = 8;
-  if (fx.echo) {
-    const delay = c.createDelay(1);
-    delay.delayTime.value = fx.echo.delay;
-    const fb = c.createGain();
-    fb.gain.value = fx.echo.feedback;
-    const wet = c.createGain();
-    wet.gain.value = fx.echo.mix;
-    node.connect(delay).connect(fb).connect(delay);
-    delay.connect(wet).connect(master);
+  if (recipe.fx?.muffle) {
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = recipe.fx.muffle;
+    bus.connect(lp).connect(master);
+  } else {
+    bus.connect(master);
   }
-  node.connect(master);
   master.connect(c.destination);
   for (const [voice, t, opts] of recipe.parts) VOICES[voice](c, bus, t + 0.02, opts, rand);
   return c.startRendering();

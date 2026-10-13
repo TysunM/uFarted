@@ -3,8 +3,9 @@ import { el, sheet, segmented } from './ui.js';
 import { api } from './api.js';
 import { playButton, stopPlayback } from './player.js';
 import { state } from './state.js';
+import { SOUNDS_VERSION } from './sounds-version.js';
 
-export const sampleSrc = (kind, type) => `/sounds/${kind}-${type}.mp3`;
+export const sampleSrc = (kind, type) => `/sounds/${kind}-${type}.mp3?v=${SOUNDS_VERSION}`;
 
 // Top-rated real community clip per type, refreshed at most once a minute.
 let champions = { at: 0, data: {} };

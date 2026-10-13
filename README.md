@@ -5,8 +5,8 @@ The free fart tracker for your gut health. Check in on bloating and belly pain, 
 - **Daily gut check**: bloating and belly pain in 2 taps, right at the top of Today.
 - **Triggers**: tag foods and habits (beans, dairy, fizzy drinks…). Insights compares your bloating on days with each trigger against days without it.
 - **Log**: one-tap quick add, or a full entry with type, time, smell, discomfort, triggers and a private note.
-- **Hear every type**: all 39 types have their own sound, playable from the type picker and the 🔊 Soundboard. Each type also plays the community's top-rated real clip (🏆) once one has 3+ reactions.
-- **Record**: clips up to 15 s. The server re-encodes them to AAC with loudness levelling, so they play on every phone, including iPhone.
+- **Hear every type**: all 39 types have their own sound (the farts are real recordings), playable from the type picker and the 🔊 Soundboard. Each type also plays the community's top-rated real clip (🏆) once one has 3+ reactions.
+- **Record**: clips up to 15 s. The server re-encodes them to MP3 with loudness levelling, so they play on every phone, including iPhone.
 - **Community**: public feed, reactions, "Fart of the Day", share links with previews, report / block / auto-hide.
 - **Insights**: bloating and pain trends, gas per day, personal baseline, peak hour, top types, badges, streaks and a share card.
 - **Health**: ranges from 2026 research, red-flag guidance, a printable 90-day doctor report and CSV export.
@@ -26,9 +26,9 @@ git clone https://github.com/TysunM/ufarted.git
 cd ufarted
 npm ci
 npm run dev        # http://localhost:3000
-npm test           # 32 API tests
+npm test           # 34 API tests
 npm run e2e        # real-browser test with a fake microphone (Chromium)
-npm run sounds     # re-synthesize the 39 type sounds into public/sounds (after editing scripts/synth.js)
+npm run sounds     # rebuild the 39 type sounds in public/sounds (see docs/SOUND_CREDITS.md)
 ```
 
 ## Go live for $0 on your laptop (Cloudflare Tunnel)
@@ -147,5 +147,6 @@ server/      Fastify API (auth, logs, gut checks, stats, community, pages), audi
 public/      PWA: js/ (views, recorder, player, offline queue), css/, icons/, service worker
 templates/   index, privacy, terms, doctor report (APP_NAME / SUPPORT_EMAIL injected)
 test/        API tests (node:test) + Playwright E2E
-docs/        LAUNCH_PLAN.md: research, positioning, go-to-market
+docs/        LAUNCH_PLAN.md (research, positioning, go-to-market), SOUND_CREDITS.md
+scripts/     render-sounds.js (type sounds), synth.js (burp synth)
 ```

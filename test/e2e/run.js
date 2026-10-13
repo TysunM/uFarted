@@ -72,7 +72,7 @@ try {
   await page.locator('#type').click();
   const picker = page.getByRole('dialog', { name: 'Pick the type' });
   await picker.waitFor();
-  const thunderSound = page.waitForResponse((r) => r.url().endsWith('/sounds/fart-thunder.mp3'));
+  const thunderSound = page.waitForResponse((r) => r.url().includes('/sounds/fart-thunder.mp3?v='));
   await picker.getByRole('button', { name: 'Hear Thunderclap' }).click();
   assert.ok([200, 206].includes((await thunderSound).status()), 'sample served');
   await picker.locator('.play.playing').waitFor({ timeout: 3000 });
@@ -155,7 +155,7 @@ try {
   await page.getByRole('button', { name: '🔊 Soundboard' }).click();
   const board = page.getByRole('dialog', { name: 'Soundboard' });
   await board.getByRole('button', { name: '🫧 Burps' }).click();
-  const belch = page.waitForResponse((r) => r.url().endsWith('/sounds/burp-belch.mp3'));
+  const belch = page.waitForResponse((r) => r.url().includes('/sounds/burp-belch.mp3?v='));
   await board.locator('.type-pick', { hasText: 'Big Belch' }).click();
   await belch;
   await page.keyboard.press('Escape');

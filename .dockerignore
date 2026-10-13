@@ -3,6 +3,7 @@ data
 .env
 test
 scripts
+assets
 docs
 *.md
 .git
